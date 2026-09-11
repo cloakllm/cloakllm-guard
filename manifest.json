@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "CloakLLM Guard",
+  "version": "0.1.0",
+  "description": "Warns you before you paste personal data into an AI chat. Detection runs locally; nothing is sent anywhere.",
+  "minimum_chrome_version": "111",
+  "background": {
+    "service_worker": "src/worker/index.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
