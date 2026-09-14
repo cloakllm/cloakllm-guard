@@ -1,57 +1,129 @@
-// Content script (ISOLATED world): captures send-intent and hands the text to
-// the service worker for scanning.
+// Content script (ISOLATED world): watches for send-intent and, when the text
+// carries personal data, stops the send and asks.
 //
-// Scans on INTENT, never per keystroke. Three triggers cover how text actually
-// reaches these boxes:
-//   paste  -- the dominant shadow-AI vector, and the only one where we see the
-//             text before it is even in the DOM
-//   Enter  -- the usual send
-//   submit -- the button, and anything the site wires to a real form
+// M2 semantics, and the reason they are shaped this way:
 //
-// M1 is detect-and-log. Nothing is blocked, nothing is shown to the user, and
-// no value ever leaves the browser: the text goes to this extension's own
-// service worker over chrome.runtime and no further.
+//   PASTE  -> scan only, never a dialog. Pasting is not sending; a person may
+//             well paste a record and then edit it down. Interrupting there
+//             would also mean warning twice for one mistake (M1 showed exactly
+//             this: paste logged, then Enter logged the same text again), which
+//             is the false-positive-fatigue failure wearing a different hat.
+//   INPUT  -> debounced scan, purely to keep the cache warm.
+//   SEND   -> the gate. Enter or submit with findings is blocked, and the
+//             person decides.
+//
+// A clean send is never intercepted: if the cache says the current text has no
+// findings, this script does nothing at all to the event. That keeps the
+// common path completely free of any risk of breaking the site.
 import { textFromPaste, textFromComposer, isSendKey } from '../shared/extract.js';
-import { adapterFor, findComposer } from '../sites/index.js';
+import { adapterFor, findComposer, findSendButton } from '../sites/index.js';
+import { lookup, acknowledge, scanAndCache, scheduleScan } from './scan-cache.js';
+import { showWarning, isOpen } from './warn-ui.js';
 
 const adapter = adapterFor(location.host);
 
-function report(trigger, text) {
-  if (!text || !text.trim()) return;
-  chrome.runtime.sendMessage({ type: 'cloakllm:scan', trigger, text }, (result) => {
-    // The worker may be asleep or the extension reloading; neither is fatal
-    // for M1. Reading lastError suppresses the "unchecked runtime.lastError"
-    // console noise.
-    if (chrome.runtime.lastError) return;
-    if (result && result.total > 0) {
-      console.log(
-        `[CloakLLM Guard] ${trigger}: `
-        + result.categories.map((c) => `${c} x${result.byCategory[c].count}`).join(', ')
-      );
-    }
-  });
+function composerText(target) {
+  const el = target && (target.value !== undefined || target.isContentEditable)
+    ? target
+    : findComposer(document, adapter);
+  return textFromComposer(el);
 }
 
-// 1. Paste. Capture phase so we see it before the site's own handler runs --
-//    at M2 this is where the interstitial will need to intercept.
+/** Resume a send the person confirmed. */
+function resumeSend() {
+  const btn = findSendButton(document, adapter);
+  if (btn) { btn.click(); return true; }
+  // Fallback: synthetic Enter on the composer. Less reliable (isTrusted is
+  // false and some handlers check it), so it is the second choice, not the
+  // first.
+  const el = findComposer(document, adapter);
+  if (!el) return false;
+  el.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true,
+  }));
+  return true;
+}
+
+/**
+ * Decide what to do about a send.
+ * @returns {boolean} true if the send should be blocked
+ */
+function shouldBlock(text) {
+  if (!text || !text.trim()) return false;
+  const { state } = lookup(text);
+  // 'clean' and 'acknowledged' pass straight through untouched.
+  // 'findings' and 'unknown' are both blocked -- claiming clean on an unknown
+  // would silently void the guarantee for anyone who types fast.
+  return state === 'findings' || state === 'unknown';
+}
+
+async function handleBlockedSend(text) {
+  let { state, summary } = lookup(text);
+
+  if (state === 'unknown') {
+    summary = await scanAndCache(text, 'send');
+    if (!summary) {
+      // Scan failed outright. Do not hold the person's send hostage to our
+      // own error -- release it and stay quiet. Failing closed here would
+      // mean a broken worker silently bricks their chat.
+      console.warn('[CloakLLM Guard] scan unavailable, send released unchecked');
+      acknowledge(text);
+      resumeSend();
+      return;
+    }
+    if (summary.total === 0) { resumeSend(); return; }
+  }
+
+  const choice = await showWarning(summary);
+  if (choice === 'send') {
+    acknowledge(text);
+    resumeSend();
+  }
+  // 'cancel' -> nothing happens; the text is still in the box, ready to edit.
+}
+
+// --- paste: scan only, no dialog ------------------------------------------
 document.addEventListener('paste', (ev) => {
-  report('paste', textFromPaste(ev.clipboardData));
+  const pasted = textFromPaste(ev.clipboardData);
+  if (!pasted || !pasted.trim()) return;
+  // Scan the composer's resulting text, not the clipboard alone: the warning
+  // at send time is about everything in the box.
+  setTimeout(() => {
+    const text = composerText(ev.target);
+    scanAndCache(text || pasted, 'paste');
+  }, 0);
 }, true);
 
-// 2. Enter-to-send. Read the composer the event came from where possible;
-//    fall back to the site adapter's selectors.
+// --- typing: keep the cache warm ------------------------------------------
+document.addEventListener('input', (ev) => {
+  const t = ev.target;
+  if (!t || (t.value === undefined && !t.isContentEditable)) return;
+  scheduleScan(textFromComposer(t), 'input');
+}, true);
+
+// --- send: the gate -------------------------------------------------------
 document.addEventListener('keydown', (ev) => {
+  if (isOpen()) {
+    // Our own dialog is up; never let a keystroke reach the site underneath.
+    if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); }
+    return;
+  }
   if (!isSendKey(ev)) return;
-  const el = ev.target && (ev.target.value !== undefined || ev.target.isContentEditable)
-    ? ev.target
-    : findComposer(document, adapter);
-  report('enter', textFromComposer(el));
+  const text = composerText(ev.target);
+  if (!shouldBlock(text)) return;
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  handleBlockedSend(text);
 }, true);
 
-// 3. Form submit, for the send button and keyboard-free paths.
 document.addEventListener('submit', (ev) => {
+  if (isOpen()) { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
   const el = findComposer(ev.target || document, adapter) || findComposer(document, adapter);
-  report('submit', textFromComposer(el));
+  const text = textFromComposer(el);
+  if (!shouldBlock(text)) return;
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  handleBlockedSend(text);
 }, true);
 
 console.log(

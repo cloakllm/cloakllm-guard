@@ -6,9 +6,21 @@ It sits on the AI chat sites you already use. When you paste or press send, it
 checks the text **on your machine** and — from M2 onward — warns you before it
 goes out. You can always send anyway. It is a seatbelt, not a lock.
 
-**Status: M1 (detect-and-log). Not usable yet — there is no warning UI, it only
-logs findings to the extension console.** Plan and milestones:
+**Status: M2 (warning UI).** It now stops a send that carries personal data and
+asks. Single site (ChatGPT), no settings screen yet. Plan and milestones:
 `../PLAN_extension_v01.md`.
+
+## When it speaks up
+
+Only at **send**. Pasting is scanned but never interrupts you — pasting is not
+sending, and you may well paste a record and then edit it down. Warning on both
+would mean two interruptions for one mistake.
+
+If the text is clean, the extension does not touch the event at all: no
+interception, no risk of breaking a normal message. If it carries something,
+the send stops and you choose. "Send anyway" is remembered for that exact text —
+edit it and the guard comes back, so confirming one card never quietly covers a
+different one pasted later.
 
 ## Three things it never does
 
@@ -49,17 +61,17 @@ the MV3 CSP and both would be Chrome Web Store review problems.
    this directory
 3. Open `https://chatgpt.com`
 4. Click **service worker** on the extension's card to open its console
-5. Paste `4111 1111 1111 1111 and marie@example.com` into the composer
+5. Type `explain mutexes` and press Enter — it should send completely normally
+6. Now type `refund the card 4111 1111 1111 1111 for marie@example.com` and
+   press Enter — the send should stop and a dialog should appear reading
+   *"this looks like it contains a credit card number and an email address"*
+7. **Let me edit it** leaves the text in the box. **Send anyway** sends it, and
+   pressing Enter again on that same text goes straight through.
 
-Expected in the service-worker console:
-
-```
-[CloakLLM Guard] 2 finding(s) on chatgpt.com via paste: CREDIT_CARD x1, EMAIL x1 (0.02 ms)
-```
-
-Note what is **not** in that line: the card number. That is the invariant, and
-`test/m1.test.js` asserts it — planted values must appear nowhere in any summary,
-including in digits-only form.
+Note what the dialog does **not** show: the card number. That is the invariant,
+and it is asserted in three places — the scan summary, the sentence a person
+reads, and the rendered dialog — each time including the digits-only form, so a
+reformatted copy cannot hide.
 
 ## Layout
 
@@ -69,10 +81,31 @@ build.mjs                vendor + content bundling, with CSP/builtin guard rails
 src/vendor-entry.js      the ONLY doorway into the SDK; exposes 3 functions
 src/vendor/              generated -- do not edit
 src/worker/index.js      service worker; owns detection, logs summaries only
-src/content/events.js    paste / Enter / submit capture (bundled to dist/)
+src/content/events.js    paste / input / Enter / submit; owns the send gate
+src/content/scan-cache.js  keeps a verdict warm so Enter can decide in sync
+src/content/warn-ui.js   the interstitial, in a closed shadow root
 src/shared/extract.js    pure text extraction, unit-tested without a DOM
+src/shared/labels.js     the only place a category becomes prose
+src/shared/hash.js       FNV-1a, for cache keys and acknowledgements
 src/sites/index.js       per-site adapters -- breakage is a one-file fix
 ```
+
+## Why the cache exists
+
+To stop a send, `preventDefault` must be called before the site's own handler
+runs — synchronously. But scanning is a round trip to the service worker, and
+you cannot await inside a keydown handler. So the extension scans as you type
+(debounced) and consults the result at Enter.
+
+What falls out is the right risk profile: text that is known-clean is never
+intercepted; text that is known-dirty is blocked; and text the cache has not
+seen yet — you typed faster than the debounce — is blocked *pending* a scan,
+then released or warned. Blocking on "unknown" is deliberate. Assuming clean
+would be the one shortcut that silently voids the guarantee.
+
+The exception is our own failure: if the scan errors outright, the send is
+released and a warning is logged. Failing closed there would mean a broken
+worker stops someone using their chat at all.
 
 ## Why detection runs in the service worker
 

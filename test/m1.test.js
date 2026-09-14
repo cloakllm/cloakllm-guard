@@ -1,4 +1,4 @@
-// M1 acceptance + invariant tests.
+﻿// M1 acceptance + invariant tests.
 //
 // The invariant suite is the important one. "Zero content storage" is the
 // property that lets a privacy company ship a tool that reads what people
@@ -159,66 +159,5 @@ test('INVARIANT: the summary shape carries counts and offsets only', () => {
   }
 });
 
-// ---------------------------------------------------- M1 acceptance (e2e) --
+// End-to-end behaviour moved to test/e2e.test.js once M2 added the send gate.
 
-test('M1: pasting a card fires a scan message carrying the right shape', () => {
-  const code = readFileSync(new URL('../dist/content.js', import.meta.url), 'utf8');
-
-  const handlers = {};
-  const sent = [];
-  const logged = [];
-  const sandbox = {
-    console: { log: (...a) => logged.push(a.join(' ')) },
-    location: { host: 'chatgpt.com' },
-    URL,
-    document: {
-      addEventListener: (type, fn) => { (handlers[type] ||= []).push(fn); },
-      querySelector: () => null,
-    },
-    chrome: {
-      runtime: {
-        lastError: null,
-        sendMessage: (msg, cb) => { sent.push(msg); cb && cb({ total: 0, categories: [], byCategory: {} }); },
-      },
-    },
-  };
-  sandbox.globalThis = sandbox;
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox, { filename: 'content.js' });
-
-  assert.ok(handlers.paste, 'content script must register a paste handler');
-  assert.ok(handlers.keydown, 'content script must register a keydown handler');
-  assert.ok(handlers.submit, 'content script must register a submit handler');
-
-  const pasted = `here is the card ${PLANTED.card} thanks`;
-  handlers.paste[0]({ clipboardData: { getData: () => pasted } });
-
-  assert.equal(sent.length, 1, 'exactly one scan message per paste');
-  assert.equal(sent[0].type, 'cloakllm:scan');
-  assert.equal(sent[0].trigger, 'paste');
-  assert.equal(sent[0].text, pasted);
-
-  // And the worker turns that message into a CREDIT_CARD finding.
-  const result = scan(sent[0].text);
-  assert.ok(result.categories.includes('CREDIT_CARD'));
-  assert.equal(result.byCategory.CREDIT_CARD.count, 1);
-});
-
-test('M1: an empty or whitespace paste sends nothing', () => {
-  const code = readFileSync(new URL('../dist/content.js', import.meta.url), 'utf8');
-  const handlers = {};
-  const sent = [];
-  const sandbox = {
-    console: { log: () => {} },
-    location: { host: 'chatgpt.com' },
-    URL,
-    document: { addEventListener: (t, fn) => { (handlers[t] ||= []).push(fn); }, querySelector: () => null },
-    chrome: { runtime: { lastError: null, sendMessage: (m) => sent.push(m) } },
-  };
-  sandbox.globalThis = sandbox;
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox, { filename: 'content.js' });
-
-  handlers.paste[0]({ clipboardData: { getData: () => '   \n  ' } });
-  assert.equal(sent.length, 0);
-});

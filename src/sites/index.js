@@ -12,6 +12,9 @@
  * @property {string} id
  * @property {(host: string) => boolean} matches
  * @property {string[]} composerSelectors  tried in order, first hit wins
+ * @property {string[]} sendButtonSelectors used to resume a send after the
+ *   person confirms; clicking the real button is far more reliable than
+ *   re-dispatching a synthetic Enter, which arrives with isTrusted false
  */
 
 /** @type {SiteAdapter[]} */
@@ -23,6 +26,10 @@ export const ADAPTERS = [
       '#prompt-textarea',
       'main form [contenteditable="true"]',
       'form textarea',
+    ],
+    sendButtonSelectors: [
+      'button[data-testid="send-button"]',
+      'form button[type="submit"]',
     ],
   },
 ];
@@ -56,6 +63,24 @@ export function findComposer(root, adapter) {
   for (const sel of selectors) {
     const el = root.querySelector(sel);
     if (el) return el;
+  }
+  return null;
+}
+
+/**
+ * Resolve the send button, used to resume a send the person confirmed.
+ *
+ * @param {{ querySelector(sel: string): any }} root
+ * @param {SiteAdapter | null} adapter
+ */
+export function findSendButton(root, adapter) {
+  const selectors = [
+    ...(adapter && adapter.sendButtonSelectors ? adapter.sendButtonSelectors : []),
+    'form button[type="submit"]',
+  ];
+  for (const sel of selectors) {
+    const el = root.querySelector(sel);
+    if (el && !el.disabled) return el;
   }
   return null;
 }
