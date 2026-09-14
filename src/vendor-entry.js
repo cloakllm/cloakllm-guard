@@ -6,6 +6,12 @@
 // config[configKey], so a plain object suffices -- we never construct a real
 // ShieldConfig, which is what pulls in fs.lstatSync.
 import { RegexBackend } from '../../cloakllm-js/src/backends/regex.js';
+import { canonicalJson } from '../../cloakllm-js/src/_canonical.js';
+
+// Re-exported so the findings log hashes entries with the SDK's own
+// canonicalizer rather than a copy. A second implementation would drift, and
+// the whole point of the log is that cloakllm-verifier can check it.
+export { canonicalJson };
 
 /**
  * v0.1 category gates.

@@ -15,6 +15,7 @@
 //      v0.1; skipping that check for built-ins is a known optimisation.
 import { createDetector, detect, summarise } from '../vendor/cloakllm-detect.js';
 import { clampForScan } from '../shared/extract.js';
+import { record, stats, exportJsonl, clear } from './log.js';
 
 let detector = null;
 function getDetector() {
@@ -41,7 +42,36 @@ export function scan(text) {
 // Guarded so this module can also be imported by tests outside an extension.
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (!msg || msg.type !== 'cloakllm:scan') return false;
+    if (!msg) return false;
+
+    // Findings-log traffic. Only warnings are recorded; a clean send writes
+    // nothing, because logging every message someone types is precisely the
+    // product this is not.
+    if (msg.type === 'cloakllm:record') {
+      const host = sender && sender.url ? new URL(sender.url).host : null;
+      record(msg.summary, { host, trigger: msg.trigger, action: msg.action })
+        .then((entry) => sendResponse({ ok: true, seq: entry.seq }))
+        .catch((err) => {
+          // A log failure must never break the guard itself.
+          console.warn(`[CloakLLM Guard] could not record finding: ${err.message}`);
+          sendResponse({ ok: false });
+        });
+      return true;
+    }
+    if (msg.type === 'cloakllm:stats') {
+      stats().then(sendResponse).catch(() => sendResponse(null));
+      return true;
+    }
+    if (msg.type === 'cloakllm:export') {
+      exportJsonl(msg.epoch).then(sendResponse).catch(() => sendResponse(null));
+      return true;
+    }
+    if (msg.type === 'cloakllm:clear') {
+      clear().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+
+    if (msg.type !== 'cloakllm:scan') return false;
 
     const result = scan(typeof msg.text === 'string' ? msg.text : '');
 

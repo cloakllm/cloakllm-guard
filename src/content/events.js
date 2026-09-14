@@ -1,4 +1,4 @@
-// Content script (ISOLATED world): watches for send-intent and, when the text
+﻿// Content script (ISOLATED world): watches for send-intent and, when the text
 // carries personal data, stops the send and asks.
 //
 // M2 semantics, and the reason they are shaped this way:
@@ -57,7 +57,7 @@ function shouldBlock(text) {
   return state === 'findings' || state === 'unknown';
 }
 
-async function handleBlockedSend(text) {
+async function handleBlockedSend(text, trigger) {
   let { state, summary } = lookup(text);
 
   if (state === 'unknown') {
@@ -75,6 +75,17 @@ async function handleBlockedSend(text) {
   }
 
   const choice = await showWarning(summary);
+
+  // Record the decision, not the text. "heeded" rather than "edited": we know
+  // they did not send, and claiming to know they then fixed it would require
+  // watching what they type next -- which we do not do.
+  chrome.runtime.sendMessage({
+    type: 'cloakllm:record',
+    summary: { total: summary.total, byCategory: summary.byCategory },
+    trigger,
+    action: choice === 'send' ? 'sent_anyway' : 'heeded',
+  }, () => void chrome.runtime.lastError);
+
   if (choice === 'send') {
     acknowledge(text);
     resumeSend();
@@ -113,7 +124,7 @@ document.addEventListener('keydown', (ev) => {
   if (!shouldBlock(text)) return;
   ev.preventDefault();
   ev.stopImmediatePropagation();
-  handleBlockedSend(text);
+  handleBlockedSend(text, 'enter');
 }, true);
 
 document.addEventListener('submit', (ev) => {
@@ -123,10 +134,11 @@ document.addEventListener('submit', (ev) => {
   if (!shouldBlock(text)) return;
   ev.preventDefault();
   ev.stopImmediatePropagation();
-  handleBlockedSend(text);
+  handleBlockedSend(text, 'submit');
 }, true);
 
 console.log(
   `[CloakLLM Guard] watching ${location.host}`
   + (adapter ? ` (adapter: ${adapter.id})` : ' (no adapter, generic selectors)')
 );
+

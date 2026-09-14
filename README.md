@@ -90,6 +90,33 @@ src/shared/hash.js       FNV-1a, for cache keys and acknowledgements
 src/sites/index.js       per-site adapters -- breakage is a one-file fix
 ```
 
+## The findings log
+
+Every warning is recorded — **the decision, never the text.** An entry carries
+the host, the trigger, the categories and their counts, and whether you heeded
+it. Nothing else. Offsets are deliberately dropped: the live check needs them,
+a stored record does not, and they leak the shape of what you wrote.
+
+Entries are SHA-256 hash-chained using CloakLLM's own canonicaliser, so an
+export verifies with the standard `cloakllm-verifier` — no special tooling:
+
+```bash
+npm run test:verifier
+```
+
+That runs a chain built by this extension's JavaScript through the real Python
+verifier, confirms an edited entry is caught, and confirms no planted value
+survives into the exported bytes.
+
+**What the log is for:** measuring whether the tool works — `heeded / shown` —
+and producing a report like *"37 near-misses this month, mostly IBANs"* without
+a single prompt ever being collected.
+
+**What it is not:** evidence about you. A chain on your own machine detects
+edits, but not deletion — you can clear it in one click, and that is the point.
+Retention rotates through epochs rather than truncating, so each epoch still
+verifies from genesis while recording the previous one's final hash.
+
 ## Why the cache exists
 
 To stop a send, `preventDefault` must be called before the site's own handler

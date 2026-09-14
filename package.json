@@ -1,15 +1,16 @@
-{
-  "name": "cloakllm-guard",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "Browser extension: warns before personal data is pasted into an AI chat.",
-  "license": "MIT",
-  "scripts": {
-    "build": "node build.mjs",
-    "test": "node --test test/*.js"
-  },
-  "devDependencies": {
-    "esbuild": "^0.28.2"
-  }
+﻿{
+    "name":  "cloakllm-guard",
+    "version":  "0.1.0",
+    "private":  true,
+    "type":  "module",
+    "description":  "Browser extension: warns before personal data is pasted into an AI chat.",
+    "license":  "MIT",
+    "scripts":  {
+                    "build":  "node build.mjs",
+                    "test":  "node --test test/*.js",
+                    "test:verifier":  "python test/verifier_crosscheck.py"
+                },
+    "devDependencies":  {
+                            "esbuild":  "^0.28.2"
+                        }
 }
