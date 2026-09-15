@@ -90,6 +90,18 @@ src/shared/hash.js       FNV-1a, for cache keys and acknowledgements
 src/sites/index.js       per-site adapters -- breakage is a one-file fix
 ```
 
+## Settings and the toolbar
+
+Click the toolbar icon for what the log says: near-misses caught, how many you
+heeded, and which categories keep coming up. Export writes a verifiable
+`audit_*.jsonl`; Clear wipes everything, with no confirmation dialog — it is
+your record of your own near-misses, and making it hard to delete would quietly
+turn a coach into a cop.
+
+Settings let you silence any category that is noisy in your work. That is not a
+nicety: a warning you learn to ignore is worse than no warning. `IP_ADDRESS` is
+off by default for exactly that reason.
+
 ## The findings log
 
 Every warning is recorded — **the decision, never the text.** An entry carries

@@ -1,4 +1,4 @@
-// End-to-end behaviour of the built content script, driven through a fake DOM.
+﻿// End-to-end behaviour of the built content script, driven through a fake DOM.
 //
 // This is the suite that matters most, because the two properties it checks
 // cannot be inferred from unit tests:
@@ -25,6 +25,7 @@ function makeHarness() {
   const handlers = {};
   const logs = [];
   const sentMessages = [];
+  const messageListeners = [];
   const sendButton = { disabled: false, clicks: 0, click() { this.clicks += 1; } };
   const composer = { value: '', isContentEditable: false };
   const stubs = new Map();
@@ -70,7 +71,15 @@ function makeHarness() {
     chrome: {
       runtime: {
         lastError: null,
-        sendMessage(msg, cb) { sentMessages.push(msg); cb(scan(msg.text)); },
+        sendMessage(msg, cb) {
+          sentMessages.push(msg);
+          // Only scan messages get a verdict back; record/stats are fire-and-forget
+          // from the content script's point of view.
+          if (cb) cb(msg.type === 'cloakllm:scan' ? scan(msg.text) : { ok: true });
+        },
+        // The content script listens for settings changes so it can drop
+        // stale-permissive cached verdicts.
+        onMessage: { addListener: (fn) => { messageListeners.push(fn); } },
       },
     },
   };
@@ -78,7 +87,7 @@ function makeHarness() {
   vm.createContext(sandbox);
   vm.runInContext(CODE, sandbox, { filename: 'content.js' });
 
-  return { handlers, logs, sentMessages, sendButton, composer, stubs, sandbox };
+  return { handlers, logs, sentMessages, sendButton, composer, stubs, sandbox, messageListeners };
 }
 
 /** Make a keydown event object that records whether it was suppressed. */
@@ -204,6 +213,69 @@ test('editing after an acknowledgement brings the guard back', async () => {
   assert.equal(ev.prevented, true, 'a new value must be warned about again');
 });
 
+// --------------------------------------------------------------- settings --
+
+test('a settings change drops the cached verdict', async () => {
+  // The stale-permissive case: text judged clean under the old settings must
+  // not keep sailing through after a category is switched on. This is the one
+  // kind of staleness that voids the guarantee.
+  const h = makeHarness();
+  h.composer.value = CLEAN;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  const before = enterEvent(h.composer);
+  h.handlers.keydown[0](before);
+  assert.equal(before.prevented, false, 'cached clean verdict lets it through');
+
+  assert.equal(h.messageListeners.length, 1, 'content script must listen for settings changes');
+  h.messageListeners[0]({ type: 'cloakllm:settingsChanged' });
+
+  const after = enterEvent(h.composer);
+  h.handlers.keydown[0](after);
+  assert.equal(after.prevented, true, 'after the change the verdict must be re-derived');
+});
+
+test('an acknowledgement survives a settings change', async () => {
+  // Acknowledgements are a person's explicit decision about specific text, not
+  // a detection result, so they are not invalidated.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+  h.handlers.keydown[0](enterEvent(h.composer));
+  await tick(10);
+  h.stubs.get('.send').listeners.click[0]();
+  await tick(10);
+
+  h.messageListeners[0]({ type: 'cloakllm:settingsChanged' });
+
+  const again = enterEvent(h.composer);
+  h.handlers.keydown[0](again);
+  assert.equal(again.prevented, false, 'the person already decided about this text');
+});
+
+test('a warning decision is reported for the log', async () => {
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+  h.handlers.keydown[0](enterEvent(h.composer));
+  await tick(10);
+  h.stubs.get('.cancel').listeners.click[0]();
+  await tick(10);
+
+  const rec = h.sentMessages.find((m) => m.type === 'cloakllm:record');
+  assert.ok(rec, 'the decision must reach the worker');
+  assert.equal(rec.action, 'heeded');
+  assert.equal(rec.trigger, 'enter');
+  assert.ok(rec.summary.byCategory.CREDIT_CARD, 'counts travel');
+  // And the text itself must not.
+  const serialised = JSON.stringify(rec);
+  assert.ok(!serialised.includes('5500 0000 0000 0004'));
+  assert.ok(!serialised.replace(/\D/g, '').includes('5500000000000004'));
+});
+
 // --------------------------------------------------------- failure modes --
 
 test('an unscanned send is blocked pending a scan, then released if clean', async () => {
@@ -232,3 +304,4 @@ test('a broken worker releases the send rather than bricking the chat', async ()
   assert.equal(h.sendButton.clicks, 1, 'the send must not be held hostage to our error');
   assert.ok(h.logs.some((l) => l.includes('scan unavailable')), 'and it must be logged');
 });
+

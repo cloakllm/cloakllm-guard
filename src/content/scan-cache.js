@@ -78,6 +78,19 @@ export function acknowledge(text) {
   acknowledged.add(hashText(text));
 }
 
+/**
+ * Drop cached verdicts (not acknowledgements) after a settings change.
+ *
+ * A verdict computed under the old settings can be stale-permissive: enable a
+ * category and text already judged clean would otherwise still sail through.
+ * Acknowledgements survive -- those were a person's explicit decision about
+ * specific text, not a detection result.
+ */
+export function invalidateVerdicts() {
+  cached = null;
+  if (timer) { clearTimeout(timer); timer = null; }
+}
+
 /** Test seam. */
 export function _reset() {
   cached = null;

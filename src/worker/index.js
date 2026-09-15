@@ -9,18 +9,42 @@
 // MV3 service workers are ephemeral. Two consequences are load-bearing here:
 //   1. The message listener MUST be registered synchronously at top level, or
 //      an event that wakes the worker arrives before the listener exists.
-//   2. Module-scope state does not survive a respawn. The detector is rebuilt
-//      on each wake: ~8 ms, dominated by RegexBackend's ReDoS safety corpus
-//      re-checking built-ins the SDK's own CI already covers. Acceptable for
-//      v0.1; skipping that check for built-ins is a known optimisation.
+//   2. Module-scope state does not survive a respawn. The detector and the
+//      settings are rebuilt on each wake: ~8 ms, dominated by RegexBackend's
+//      ReDoS safety corpus re-checking built-ins the SDK's own CI already
+//      covers. Acceptable for v0.1.
 import { createDetector, detect, summarise } from '../vendor/cloakllm-detect.js';
 import { clampForScan } from '../shared/extract.js';
 import { record, stats, exportJsonl, clear } from './log.js';
+import { load as loadSettings, save as saveSettings, toDetectorConfig, enabledCategories }
+  from '../shared/settings.js';
 
 let detector = null;
-function getDetector() {
-  if (!detector) detector = createDetector();
+let active = null;          // Set of categories the user wants reported
+let settingsPromise = null;
+
+/**
+ * Settings are read once per worker lifetime, not per scan: storage is cheap
+ * but not free, and a scan sits in front of a keystroke.
+ */
+function currentSettings() {
+  if (!settingsPromise) settingsPromise = loadSettings();
+  return settingsPromise;
+}
+
+function getDetector(settings) {
+  if (!detector) {
+    detector = settings ? createDetector(toDetectorConfig(settings)) : createDetector();
+    active = settings ? enabledCategories(settings) : null;
+  }
   return detector;
+}
+
+/** Drop cached settings and detector so the next scan picks up a change. */
+export function invalidate() {
+  detector = null;
+  active = null;
+  settingsPromise = null;
 }
 
 /**
@@ -29,13 +53,38 @@ function getDetector() {
  * The matched values never leave this function. Callers get categories,
  * counts and offsets -- enough to warn a person and to count near-misses,
  * and not enough to reconstruct what they wrote.
+ *
+ * @param {string} text
+ * @param {object} [settings] when omitted, all v0.1 defaults apply
  */
-export function scan(text) {
+export function scan(text, settings) {
   const t0 = performance.now();
   const { text: scannable, truncated } = clampForScan(text);
-  const detections = detect(getDetector(), scannable);
+  let detections = detect(getDetector(settings), scannable);
+  // Post-filter for the shared SDK gates: API_KEY, AWS_KEY and JWT all ride on
+  // `detectApiKeys`, so silencing one of them has to happen here rather than in
+  // the config, or it would switch off its siblings too.
+  if (active) detections = detections.filter((d) => active.has(d.category));
   const summary = summarise(detections);
   return { ...summary, truncated, ms: +(performance.now() - t0).toFixed(3) };
+}
+
+/**
+ * Tell open tabs to drop cached verdicts after a settings change.
+ *
+ * Content scripts hold verdicts computed under the OLD settings. Enabling a
+ * category would otherwise leave text already judged clean still passing
+ * through -- a stale permissive verdict, which is the one kind of staleness
+ * that voids the guarantee.
+ */
+async function notifyTabs() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const t of tabs) {
+      chrome.tabs.sendMessage(t.id, { type: 'cloakllm:settingsChanged' },
+        () => void chrome.runtime.lastError);
+    }
+  } catch { /* no tabs to tell; caches also expire as soon as the text changes */ }
 }
 
 // --- wiring ---------------------------------------------------------------
@@ -44,51 +93,68 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg) return false;
 
-    // Findings-log traffic. Only warnings are recorded; a clean send writes
-    // nothing, because logging every message someone types is precisely the
-    // product this is not.
-    if (msg.type === 'cloakllm:record') {
-      const host = sender && sender.url ? new URL(sender.url).host : null;
-      record(msg.summary, { host, trigger: msg.trigger, action: msg.action })
-        .then((entry) => sendResponse({ ok: true, seq: entry.seq }))
-        .catch((err) => {
-          // A log failure must never break the guard itself.
-          console.warn(`[CloakLLM Guard] could not record finding: ${err.message}`);
-          sendResponse({ ok: false });
-        });
-      return true;
-    }
-    if (msg.type === 'cloakllm:stats') {
-      stats().then(sendResponse).catch(() => sendResponse(null));
-      return true;
-    }
-    if (msg.type === 'cloakllm:export') {
-      exportJsonl(msg.epoch).then(sendResponse).catch(() => sendResponse(null));
-      return true;
-    }
-    if (msg.type === 'cloakllm:clear') {
-      clear().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
-      return true;
-    }
+    switch (msg.type) {
+      // Findings-log traffic. Only warnings are recorded; a clean send writes
+      // nothing, because logging every message someone types is precisely the
+      // product this is not.
+      case 'cloakllm:record': {
+        currentSettings().then((s) => {
+          if (!s.logEnabled) return { seq: null };
+          const host = sender && sender.url ? new URL(sender.url).host : null;
+          return record(msg.summary, { host, trigger: msg.trigger, action: msg.action });
+        })
+          .then((entry) => sendResponse({ ok: true, seq: entry ? entry.seq : null }))
+          .catch((err) => {
+            // A log failure must never break the guard itself.
+            console.warn(`[CloakLLM Guard] could not record finding: ${err.message}`);
+            sendResponse({ ok: false });
+          });
+        return true;
+      }
 
-    if (msg.type !== 'cloakllm:scan') return false;
+      case 'cloakllm:stats':
+        stats().then(sendResponse).catch(() => sendResponse(null));
+        return true;
 
-    const result = scan(typeof msg.text === 'string' ? msg.text : '');
+      case 'cloakllm:export':
+        exportJsonl(msg.epoch).then(sendResponse).catch(() => sendResponse(null));
+        return true;
 
-    // M1 is detect-and-log: no UI yet. Log the SUMMARY only -- never the
-    // matched text. Keeping that discipline from the first commit is what
-    // makes "we never retain what you wrote" true by construction rather
-    // than by intention.
-    if (result.total > 0) {
-      const where = sender && sender.url ? new URL(sender.url).host : 'unknown';
-      console.log(
-        `[CloakLLM Guard] ${result.total} finding(s) on ${where} via ${msg.trigger}: `
-        + result.categories.map((c) => `${c} x${result.byCategory[c].count}`).join(', ')
-        + ` (${result.ms} ms${result.truncated ? ', input truncated' : ''})`
-      );
+      case 'cloakllm:clear':
+        clear().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+        return true;
+
+      case 'cloakllm:getSettings':
+        currentSettings().then(sendResponse).catch(() => sendResponse(null));
+        return true;
+
+      case 'cloakllm:setSettings':
+        saveSettings(msg.patch)
+          .then(async (next) => { invalidate(); await notifyTabs(); sendResponse(next); })
+          .catch(() => sendResponse(null));
+        return true;
+
+      case 'cloakllm:scan':
+        currentSettings().then((settings) => {
+          const result = scan(typeof msg.text === 'string' ? msg.text : '', settings);
+
+          // Log the SUMMARY only -- never the matched text. Keeping that
+          // discipline from the first commit is what makes "we never retain
+          // what you wrote" true by construction rather than by intention.
+          if (result.total > 0) {
+            const where = sender && sender.url ? new URL(sender.url).host : 'unknown';
+            console.log(
+              `[CloakLLM Guard] ${result.total} finding(s) on ${where} via ${msg.trigger}: `
+              + result.categories.map((c) => `${c} x${result.byCategory[c].count}`).join(', ')
+              + ` (${result.ms} ms${result.truncated ? ', input truncated' : ''})`
+            );
+          }
+          sendResponse(result);
+        }).catch(() => sendResponse(null));
+        return true;
+
+      default:
+        return false;
     }
-
-    sendResponse(result);
-    return true;
   });
 }

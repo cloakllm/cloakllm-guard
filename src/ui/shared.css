@@ -1,0 +1,55 @@
+/* Shared chrome for the popup and the options page.
+   Matches the interstitial so the extension reads as one object. */
+
+:root {
+  --ground: #18181b;
+  --raised: #202024;
+  --line: #2f2f35;
+  --ink: #fafafa;
+  --ink-soft: #a1a1aa;
+  --ink-dim: #71717a;
+  --accent: #8b5cf6;
+  --accent-ink: #c4b5fd;
+  --good: #4ade80;
+  --warn: #fbbf24;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.brand {
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  margin: 0 0 10px;
+}
+
+h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+h2 {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-dim);
+  margin: 0 0 10px;
+}
+p { margin: 0 0 10px; color: var(--ink-soft); }
+
+button {
+  font: inherit; padding: 7px 12px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--raised); color: var(--ink);
+}
+button:hover { background: #2b2b31; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: #7c3aed; }
+button.danger { color: #fca5a5; }
+button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+button:disabled { opacity: .45; cursor: default; }
+
+.note { font-size: 11px; color: var(--ink-dim); margin: 0; }
+a { color: var(--accent-ink); }

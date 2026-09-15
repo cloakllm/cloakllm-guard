@@ -17,7 +17,7 @@
 // common path completely free of any risk of breaking the site.
 import { textFromPaste, textFromComposer, isSendKey } from '../shared/extract.js';
 import { adapterFor, findComposer, findSendButton, resolveComposer, healthLine } from '../sites/index.js';
-import { lookup, acknowledge, scanAndCache, scheduleScan } from './scan-cache.js';
+import { lookup, acknowledge, scanAndCache, scheduleScan, invalidateVerdicts } from './scan-cache.js';
 import { showWarning, isOpen } from './warn-ui.js';
 
 const adapter = adapterFor(location.host);
@@ -136,6 +136,12 @@ document.addEventListener('submit', (ev) => {
   ev.stopImmediatePropagation();
   handleBlockedSend(text, 'submit');
 }, true);
+
+// --- settings changes -----------------------------------------------------
+// A verdict cached under the old settings can be stale-permissive, so drop it.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'cloakllm:settingsChanged') invalidateVerdicts();
+});
 
 // --- adapter health -------------------------------------------------------
 // Selector drift is invisible by nature: the site keeps working, the extension
