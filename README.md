@@ -48,6 +48,21 @@ npm run build
 npm test
 ```
 
+To produce the uploadable zip:
+
+```
+npm run package
+```
+
+The file list is **derived**, not hand-written: the packager reads the manifest,
+resolves every path it names, and walks the service worker's import graph. A
+manifest entry pointing at a file the zip omits would install fine and do
+nothing — Chrome does not complain, the extension just sits inert in the
+toolbar — so anything missing fails the build instead.
+
+Icons are generated (`npm run icons`) rather than committed as opaque binaries;
+`tools/make-icons.mjs` draws them and encodes the PNGs with `node:zlib`.
+
 `build.mjs` bundles the detection subset from the sibling `cloakllm-js`
 checkout into `src/vendor/`, and the content script into `dist/`. It fails the
 build if a Node builtin or any runtime code generation (`eval`, `new Function`,

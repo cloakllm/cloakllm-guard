@@ -6,3 +6,6 @@ node_modules/
 # extension must not have.
 dist/
 src/vendor/
+
+# Packaged uploads.
+build/

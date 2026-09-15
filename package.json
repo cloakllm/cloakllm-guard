@@ -8,7 +8,9 @@
     "scripts":  {
                     "build":  "node build.mjs",
                     "test":  "node --test test/*.js",
-                    "test:verifier":  "python test/verifier_crosscheck.py"
+                    "test:verifier":  "python test/verifier_crosscheck.py",
+                    "icons":  "node tools/make-icons.mjs",
+                    "package":  "npm run build \u0026\u0026 node tools/package.mjs"
                 },
     "devDependencies":  {
                             "esbuild":  "^0.28.2"

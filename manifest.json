@@ -5,13 +5,25 @@
   "description": "Warns you before you paste personal data into an AI chat. Detection runs locally; nothing is sent anywhere.",
   "minimum_chrome_version": "111",
   "permissions": ["storage"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "background": {
     "service_worker": "src/worker/index.js",
     "type": "module"
   },
   "action": {
     "default_popup": "src/ui/popup.html",
-    "default_title": "CloakLLM Guard"
+    "default_title": "CloakLLM Guard",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "options_page": "src/ui/options.html",
   "content_scripts": [
