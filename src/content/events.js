@@ -16,7 +16,7 @@
 // findings, this script does nothing at all to the event. That keeps the
 // common path completely free of any risk of breaking the site.
 import { textFromPaste, textFromComposer, isSendKey } from '../shared/extract.js';
-import { adapterFor, findComposer, findSendButton } from '../sites/index.js';
+import { adapterFor, findComposer, findSendButton, resolveComposer, healthLine } from '../sites/index.js';
 import { lookup, acknowledge, scanAndCache, scheduleScan } from './scan-cache.js';
 import { showWarning, isOpen } from './warn-ui.js';
 
@@ -137,8 +137,19 @@ document.addEventListener('submit', (ev) => {
   handleBlockedSend(text, 'submit');
 }, true);
 
-console.log(
-  `[CloakLLM Guard] watching ${location.host}`
-  + (adapter ? ` (adapter: ${adapter.id})` : ' (no adapter, generic selectors)')
-);
+// --- adapter health -------------------------------------------------------
+// Selector drift is invisible by nature: the site keeps working, the extension
+// keeps running, and it quietly stops seeing what people type. These sites
+// hydrate late, so re-check a few times before concluding anything, then say
+// plainly which of the three states we are in.
+(function reportHealth(attempt = 0) {
+  const resolution = resolveComposer(document, adapter);
+  if (!resolution.via && attempt < 6) {
+    setTimeout(() => reportHealth(attempt + 1), 1000);
+    return;
+  }
+  const line = healthLine(location.host, adapter, resolution);
+  if (line.startsWith('WARNING')) console.warn(`[CloakLLM Guard] ${line}`);
+  else console.log(`[CloakLLM Guard] ${line}`);
+})();
 
