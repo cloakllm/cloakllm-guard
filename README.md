@@ -6,9 +6,18 @@ It sits on the AI chat sites you already use. When you paste or press send, it
 checks the text **on your machine** and — from M2 onward — warns you before it
 goes out. You can always send anyway. It is a seatbelt, not a lock.
 
-**Status: M2 (warning UI).** It now stops a send that carries personal data and
-asks. Single site (ChatGPT), no settings screen yet. Plan and milestones:
-`../PLAN_extension_v01.md`.
+**Status: v0.1, feature-complete and not yet published.** It works — install it
+unpacked and it will stop a send that carries personal data and ask. It is not
+on the Chrome Web Store yet, and two things are deliberately unfinished:
+
+- The composer selectors for **Claude, Gemini and Copilot are inferred, not
+  verified.** Every one of those sites gates its composer behind a login, so
+  they could not be read off a live page. ChatGPT is verified. If an adapter
+  has drifted the extension says so in the page console rather than failing
+  quietly — see *Adapter health* below.
+- The popup and options pages have not been exercised in a real browser.
+
+Bug reports on either are the most useful thing you could send.
 
 ## When it speaks up
 
@@ -160,6 +169,24 @@ would be the one shortcut that silently voids the guarantee.
 The exception is our own failure: if the scan errors outright, the send is
 released and a warning is logged. Failing closed there would mean a broken
 worker stops someone using their chat at all.
+
+## Adapter health
+
+Each AI chat site needs its own selectors for the message box, and vendors
+reshuffle their frontends without notice. That kind of breakage is invisible by
+nature: the site keeps working, the extension keeps running, and it quietly
+stops seeing what you type.
+
+So it reports which of three states it is in, in the page console:
+
+```
+[CloakLLM Guard] watching chatgpt.com (adapter: chatgpt)
+[CloakLLM Guard] WARNING: gemini adapter selectors all missed ... protection is degraded
+[CloakLLM Guard] WARNING: claude adapter found no composer ... NOT protecting this page
+```
+
+If you see either warning, please open an issue with the line — the fix is one
+file, `src/sites/index.js`.
 
 ## Why detection runs in the service worker
 

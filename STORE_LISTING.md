@@ -137,9 +137,8 @@ Must be publicly reachable before submission. `PRIVACY.md` is the content;
 
 ## Unresolved before anyone submits
 
-1. **Repo name and public URL** — the listing links to a repository that does
-   not exist yet; `cloakllm-guard` is still a placeholder and the local repo has
-   no remote.
+1. ~~Repo name and public URL~~ — **done 2026-09-15:**
+   https://github.com/cloakllm/cloakllm-guard (public).
 2. **The Claude, Gemini and Copilot selectors are inferred, not verified.**
    Shipping to users on sites where the adapter may not bind is worse than not
    listing those sites: the extension would sit in the toolbar looking like
