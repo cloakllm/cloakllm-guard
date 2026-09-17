@@ -1,4 +1,4 @@
-﻿// Content script (ISOLATED world): watches for send-intent and, when the text
+// Content script (ISOLATED world): watches for send-intent and, when the text
 // carries personal data, stops the send and asks.
 //
 // M2 semantics, and the reason they are shaped this way:

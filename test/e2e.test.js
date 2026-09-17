@@ -1,4 +1,4 @@
-﻿// End-to-end behaviour of the built content script, driven through a fake DOM.
+// End-to-end behaviour of the built content script, driven through a fake DOM.
 //
 // This is the suite that matters most, because the two properties it checks
 // cannot be inferred from unit tests:

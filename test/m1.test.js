@@ -1,4 +1,4 @@
-﻿// M1 acceptance + invariant tests.
+// M1 acceptance + invariant tests.
 //
 // The invariant suite is the important one. "Zero content storage" is the
 // property that lets a privacy company ship a tool that reads what people

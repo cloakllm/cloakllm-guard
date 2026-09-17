@@ -1,4 +1,4 @@
-﻿// M4 settings tests, plus a manifest guard for the permissions bug this
+// M4 settings tests, plus a manifest guard for the permissions bug this
 // milestone uncovered.
 import test from 'node:test';
 import assert from 'node:assert/strict';
