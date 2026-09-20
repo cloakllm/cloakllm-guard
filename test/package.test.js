@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { ADAPTERS } from '../src/sites/index.js';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -38,6 +39,47 @@ test('icons are real PNGs at the declared sizes', () => {
     // IHDR width/height live at bytes 16..24.
     assert.equal(buf.readUInt32BE(16), Number(size), `${path} is the wrong width`);
     assert.equal(buf.readUInt32BE(20), Number(size), `${path} is the wrong height`);
+  }
+});
+
+test('MANIFEST AND ADAPTERS AGREE, IN BOTH DIRECTIONS', () => {
+  // Found by audit, 2026-09-20. The existing checks all ran one way --
+  // manifest -> privacy policy, manifest -> listing -- and nothing checked
+  // adapter -> manifest. So the copilot adapter claimed www.bing.com and the
+  // claude adapter claimed *.claude.ai while the manifest injected into
+  // neither: dead branches that overstated coverage to anyone reading the
+  // file, and a trap if a later manifest change ever made them live with
+  // selectors nobody had verified.
+  //
+  // The reason it went unnoticed is worth more than the bug: `matches` was a
+  // PREDICATE, and a predicate cannot be enumerated, so no test could ask
+  // "which hosts does this adapter claim?". It is a list now.
+  const declared = manifest.content_scripts.flatMap((cs) => cs.matches)
+    .map((p) => p.replace(/^https:\/\//, '').replace(/\/\*$/, ''));
+
+  for (const a of ADAPTERS) {
+    for (const host of a.hosts) {
+      assert.ok(declared.includes(host),
+        `the ${a.id} adapter claims ${host}, but no content script runs there `
+        + `-- it would never protect that site`);
+    }
+  }
+
+  for (const host of declared) {
+    const owner = ADAPTERS.find((a) => a.matches(host));
+    assert.ok(owner,
+      `the manifest injects into ${host}, but no adapter claims it `
+      + `-- it would fall back to generic selectors with no health reporting`);
+  }
+});
+
+test('every adapter host list is non-empty and exactly matched', () => {
+  for (const a of ADAPTERS) {
+    assert.ok(Array.isArray(a.hosts) && a.hosts.length, `${a.id} has no hosts`);
+    for (const h of a.hosts) assert.equal(a.matches(h), true, `${a.id} vs ${h}`);
+    // Exact match only -- no accidental subdomain widening.
+    assert.equal(a.matches(`evil-${a.hosts[0]}`), false);
+    assert.equal(a.matches(`${a.hosts[0]}.evil.test`), false);
   }
 });
 

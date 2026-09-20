@@ -61,7 +61,14 @@
 /**
  * @typedef {Object} SiteAdapter
  * @property {string} id
- * @property {(host: string) => boolean} matches
+ * @property {string[]} hosts  every host this adapter claims, ENUMERABLE on
+ *   purpose. These were predicates until an audit (2026-09-20) found the
+ *   copilot adapter claiming www.bing.com and the claude adapter claiming
+ *   *.claude.ai, neither of which the manifest injects into -- so both
+ *   branches were dead, and both overstated coverage to anyone reading the
+ *   file. A predicate cannot be cross-checked against the manifest; a list
+ *   can, and now is, in both directions.
+ * @property {(host: string) => boolean} matches derived from `hosts`
  * @property {string[]} composerSelectors  tried in order, first hit wins
  * @property {string[]} sendButtonSelectors used to resume a send after the
  *   person confirms; clicking the real button is far more reliable than
@@ -72,7 +79,7 @@
 export const ADAPTERS = [
   {
     id: 'chatgpt',
-    matches: (host) => host === 'chatgpt.com' || host === 'chat.openai.com',
+    hosts: ['chatgpt.com', 'chat.openai.com'],
     composerSelectors: [
       '#prompt-textarea',
       'main form [contenteditable="true"]',
@@ -85,7 +92,7 @@ export const ADAPTERS = [
   },
   {
     id: 'claude',
-    matches: (host) => host === 'claude.ai' || host.endsWith('.claude.ai'),
+    hosts: ['claude.ai'],
     composerSelectors: [
       'div[contenteditable="true"].ProseMirror',
       'fieldset div[contenteditable="true"]',
@@ -105,7 +112,7 @@ export const ADAPTERS = [
   },
   {
     id: 'gemini',
-    matches: (host) => host === 'gemini.google.com',
+    hosts: ['gemini.google.com'],
     composerSelectors: [
       'rich-textarea div.ql-editor[contenteditable="true"]',
       'div.ql-editor[contenteditable="true"]',
@@ -118,9 +125,7 @@ export const ADAPTERS = [
   },
   {
     id: 'copilot',
-    matches: (host) => host === 'copilot.microsoft.com'
-      || host === 'm365.cloud.microsoft'
-      || host === 'www.bing.com',
+    hosts: ['copilot.microsoft.com', 'm365.cloud.microsoft'],
     composerSelectors: [
       'textarea#userInput',
       'textarea[data-testid="composer-input"]',
@@ -133,6 +138,14 @@ export const ADAPTERS = [
     ],
   },
 ];
+
+// Derive the predicate from the list, so the two cannot drift apart. Exact
+// host match only: a subdomain wildcard would need a matching manifest
+// pattern, and widening host access to cover a subdomain nobody has seen is
+// the opposite of this extension's posture.
+for (const a of ADAPTERS) {
+  a.matches = (host) => a.hosts.includes(host);
+}
 
 /** Generic last resort, used when a site's own selectors all miss. */
 export const FALLBACK_SELECTORS = [
