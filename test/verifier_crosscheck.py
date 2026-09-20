@@ -23,9 +23,15 @@ from cloakllm_verifier.verify import verify_audit  # noqa: E402
 
 
 def emit(target: Path) -> str:
+    # No shell=True. On POSIX, shell=True with an argument LIST runs only the
+    # first element and hands the rest to the shell as $0/$1/... -- so this
+    # would have started a bare `node` REPL in CI and emitted nothing, while
+    # looking like a normal call. node is a real executable on Windows too
+    # (unlike npm/npx, which are batch files), so the shell is not needed
+    # anywhere.
     out = subprocess.run(
         ["node", str(REPO / "test" / "emit_chain.mjs"), str(target)],
-        capture_output=True, text=True, cwd=str(REPO), shell=True,
+        capture_output=True, text=True, cwd=str(REPO),
     )
     if out.returncode != 0:
         print(out.stdout)

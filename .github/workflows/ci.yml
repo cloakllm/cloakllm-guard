@@ -1,0 +1,104 @@
+name: CI
+
+# This repo had NO CI until 2026-09-20, which is how the v0.12.4 crash
+# reached a user. 111 tests and a build-time guard existed, and nothing ran
+# either of them on push -- so "the tests pass" meant "they passed on the
+# machine of whoever last remembered to type the command".
+#
+# The build is the load-bearing step, not just a prerequisite for the tests:
+# build.mjs refuses bundles that reach for Node builtins or that cannot run
+# with `process` deleted, which is exactly the defect that shipped.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      # The vendored detection bundle is built from the SIBLING cloakllm-js
+      # checkout by relative path (src/vendor-entry.js), deliberately: a
+      # committed copy of the engine would drift from the SDK it claims to be.
+      # So CI has to reproduce the workspace layout.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: cloakllm-guard
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: cloakllm/CloakLLM-JS
+          path: cloakllm-js
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Install
+        working-directory: cloakllm-guard
+        run: npm install
+
+      # Fails the build on Node builtins, on runtime code generation, and --
+      # since v0.12.5 -- on a bundle that throws when `process` is absent.
+      - name: Build the vendored detection bundle
+        working-directory: cloakllm-guard
+        run: npm run build
+
+      - name: Test
+        working-directory: cloakllm-guard
+        run: npm test
+
+  # Separate job so a cross-language divergence is legible as such, rather
+  # than as "the extension's tests failed".
+  verifier-crosscheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: cloakllm-guard
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: cloakllm/CloakLLM-JS
+          path: cloakllm-js
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: cloakllm/cloakllm-verifier
+          path: cloakllm-verifier
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        working-directory: cloakllm-guard
+        run: npm install
+
+      # The verifier declares cloakllm[attestation,timestamping] and resolves
+      # it from PyPI, so this checks the extension's chain against the
+      # PUBLISHED auditor stack rather than a local one.
+      - name: Install the verifier
+        run: pip install ./cloakllm-verifier
+
+      - name: Build the vendored detection bundle
+        working-directory: cloakllm-guard
+        run: npm run build
+
+      # Runs the extension's REAL emitted chain through the REAL verifier.
+      - name: Chain verifies in Python
+        working-directory: cloakllm-guard
+        run: python test/verifier_crosscheck.py
