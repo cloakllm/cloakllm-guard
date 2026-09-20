@@ -97,6 +97,34 @@ async function handleBlockedSend(text, trigger) {
   }
 }
 
+/**
+ * A send we could not read at all.
+ *
+ * Same principle as a failed scan -- fail-open on the ACTION, never on the
+ * INFORMATION -- but a different cause, so it says a different thing. There
+ * is no text to acknowledge here, because we never saw any: confirming sends
+ * this once and the next send is checked again from scratch.
+ */
+async function handleUnreadableSend(trigger) {
+  handling = true;
+  try {
+    console.warn(
+      '[CloakLLM Guard] could not read the message box; asking before sending. '
+      + `The ${adapter ? adapter.id : 'site'} adapter may need updating.`
+    );
+    const proceed = await showUnavailable('unreadable');
+    chrome.runtime.sendMessage({
+      type: 'cloakllm:record',
+      summary: { total: 0, byCategory: {} },
+      trigger,
+      action: proceed === 'send' ? 'sent_unchecked' : 'heeded_unchecked',
+    }, () => void chrome.runtime.lastError);
+    if (proceed === 'send') resumeSend();
+  } finally {
+    handling = false;
+  }
+}
+
 async function runBlockedSend(text, trigger) {
   let { state, summary } = lookup(text);
 
@@ -233,7 +261,25 @@ function onSendClick(ev) {
   if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
   if (!isSendTarget(ev.target, adapter)) return;
 
-  const text = textFromComposer(findComposer(document, adapter));
+  // A send control was pressed but the composer could not be resolved. That
+  // is NOT the same as an empty box, and the difference is the whole guard:
+  // textFromComposer(null) returns '', shouldBlock('') returns false, and
+  // the send was released with no dialog and nothing in any console. A
+  // silent fail-open, reachable whenever a site changes its composer -- the
+  // exact drift these adapters are expected to suffer.
+  //
+  // The Enter path never had this hole because it reads ev.target, which IS
+  // the composer. Only the click path resolves by selector, and the click
+  // path is the one most people use.
+  const composer = findComposer(document, adapter);
+  if (!composer) {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    handleUnreadableSend('click');
+    return;
+  }
+
+  const text = textFromComposer(composer);
   if (!shouldBlock(text)) return;
   ev.preventDefault();
   ev.stopImmediatePropagation();

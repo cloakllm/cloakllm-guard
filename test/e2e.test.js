@@ -598,6 +598,53 @@ test('THE DIALOG IS CLICKABLE: our own send gate must not eat its buttons', asyn
   }
 });
 
+test('AN UNREADABLE COMPOSER IS NOT A CLEAN ONE', async () => {
+  // The silent fail-open. textFromComposer(null) returns '', and
+  // shouldBlock('') returns false BEFORE the unknown-blocks logic, so a send
+  // whose composer could not be resolved was released with no dialog and
+  // nothing in any console. Reachable whenever a site changes its composer,
+  // which is precisely the drift these adapters are expected to suffer.
+  //
+  // Only the click path had it: Enter reads ev.target, which IS the composer.
+  // The click path resolves by selector, and it is the one most people use.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  // The site changes its DOM: the composer selectors stop matching.
+  h.sandbox.document.querySelector = (sel) => (
+    /send-button|submit/.test(sel) ? h.sendButton : null
+  );
+
+  const ev = clickEventOn(h.sendButton);
+  for (const fn of (h.handlers.click || [])) fn(ev);
+  await tick(20);
+
+  assert.equal(ev.stopped, true, 'the send must be held, not released');
+  assert.ok(h.stubs.size > 0, 'and the person must be told we could not read it');
+  assert.ok(h.logs.some((l) => /could not read the message box/.test(l)),
+    'and it must say so in the console, naming the adapter');
+  assert.ok(!h.logs.some((l) => /undefined/.test(l)),
+    'the adapter must be named, not printed as undefined');
+});
+
+test('an EMPTY composer is still released, not warned about', async () => {
+  // The other side of the same coin: a genuinely empty box is not a failure
+  // to read one. Treating both as "could not check" would put a dialog in
+  // front of ordinary clicks, and a dialog people learn to click through is
+  // worse than no dialog.
+  const h = makeHarness();
+  h.composer.value = '';
+
+  const ev = clickEventOn(h.sendButton);
+  for (const fn of (h.handlers.click || [])) fn(ev);
+  await tick(20);
+
+  assert.equal(ev.stopped, false, 'an empty send must pass straight through');
+  assert.equal(h.stubs.size, 0, 'and raise no dialog');
+});
+
 test('the dialog is reachable by KEYBOARD too', async () => {
   // The dialog focuses its own cancel button on open, so Enter is how a
   // keyboard user answers it. The keydown gate blocks Enter while a warning

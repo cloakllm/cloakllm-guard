@@ -70,16 +70,27 @@ export function showWarning(summary) {
  * the INFORMATION is not. If we could not check, the person is the only one
  * who can decide, and they cannot decide something nobody told them about.
  *
- * @param {'reloaded'|'unavailable'} reason
+ * @param {'reloaded'|'unavailable'|'unreadable'} reason
  * @returns {Promise<'send'|'cancel'>}
  */
 export function showUnavailable(reason) {
-  const body = reason === 'reloaded'
-    ? 'CloakLLM Guard was updated or restarted, so it could not check this '
+  let body;
+  if (reason === 'reloaded') {
+    body = 'CloakLLM Guard was updated or restarted, so it could not check this '
       + 'message. <span class="found">Reload this page</span> to start '
-      + 'checking again.'
-    : 'CloakLLM Guard could not check this message, so it does not know '
+      + 'checking again.';
+  } else if (reason === 'unreadable') {
+    // The site changed its composer out from under the adapter. Distinct from
+    // 'unavailable' (the worker) because the remedy is different and because
+    // it is the shape that adapter drift takes -- naming it is what turns a
+    // silent blind spot into a report.
+    body = 'CloakLLM Guard could not read this message box, so it does not '
+      + 'know whether the message contains personal data. This usually means '
+      + 'the site changed and the extension needs an update.';
+  } else {
+    body = 'CloakLLM Guard could not check this message, so it does not know '
       + 'whether it contains personal data.';
+  }
   return showDialog({
     title: 'Could not check this message',
     body,
