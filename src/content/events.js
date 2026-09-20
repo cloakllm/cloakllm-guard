@@ -18,6 +18,7 @@
 import { textFromPaste, textFromComposer, isSendKey } from '../shared/extract.js';
 import {
   adapterFor, findComposer, findSendButton, resolveComposer, healthLine,
+  resolveSendControl, sendHealthLine,
   isSendTarget,
 } from '../sites/index.js';
 import {
@@ -313,12 +314,21 @@ chrome.runtime.onMessage.addListener((msg) => {
 // plainly which of the three states we are in.
 (function reportHealth(attempt = 0) {
   const resolution = resolveComposer(document, adapter);
-  if (!resolution.via && attempt < 6) {
+  const send = resolveSendControl(document, adapter);
+  // Wait for EITHER to settle, not just the composer. The send control was
+  // never reported on at all, which is the blind spot that let the missing
+  // click listener live: a stale send selector means the click is never
+  // recognised as a send, with nothing anywhere to say so.
+  if ((!resolution.via || !send.via) && attempt < 6) {
     setTimeout(() => reportHealth(attempt + 1), 1000);
     return;
   }
   const line = healthLine(location.host, adapter, resolution);
   if (line.startsWith('WARNING')) console.warn(`[CloakLLM Guard] ${line}`);
   else console.log(`[CloakLLM Guard] ${line}`);
+
+  // Null when it resolved cleanly, so a healthy page keeps one line.
+  const sendLine = sendHealthLine(location.host, adapter, send);
+  if (sendLine) console.warn(`[CloakLLM Guard] ${sendLine}`);
 })();
 

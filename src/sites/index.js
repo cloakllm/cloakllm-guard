@@ -259,6 +259,54 @@ export function findSendButton(root, adapter) {
  * keeps running, and it simply stops seeing what people type. Saying so out
  * loud is the only cheap defence.
  */
+/**
+ * Resolve a send control for HEALTH REPORTING.
+ *
+ * Deliberately NOT findSendButton. That one skips disabled controls because
+ * its job is to click one, and at startup the send button is usually
+ * disabled precisely because the box is empty -- filtering on disabled here
+ * would report drift on every quiet page, and a health line that cries wolf
+ * is worth less than none.
+ *
+ * @returns {{ el: any, via: 'site'|'hint'|null, selector: string|null }}
+ */
+export function resolveSendControl(root, adapter) {
+  const site = (adapter && adapter.sendButtonSelectors) || [];
+  for (const sel of site) {
+    const el = root.querySelector(sel);
+    if (el) return { el, via: 'site', selector: sel };
+  }
+  for (const sel of SEND_HINTS) {
+    const el = root.querySelector(sel);
+    if (el) return { el, via: 'hint', selector: sel };
+  }
+  return { el: null, via: null, selector: null };
+}
+
+/**
+ * What to say about the SEND CONTROL, or null when there is nothing to say.
+ *
+ * The composer had health reporting from the start; the send control did
+ * not, and that asymmetry is exactly the blind spot that let the original
+ * missing-click-listener bug live. When a send selector goes stale the click
+ * is simply never recognised as a send: no dialog, no warning, nothing in
+ * any console -- and Enter keeps working, which makes it HARDER to notice,
+ * not easier. Silent non-protection on the path most people use.
+ *
+ * Null on a clean resolve, so a healthy page does not gain a second line.
+ */
+export function sendHealthLine(host, adapter, resolution) {
+  if (resolution.via === 'site') return null;
+  const who = adapter ? `${adapter.id} adapter` : 'generic';
+  if (resolution.via === 'hint') {
+    return `WARNING: ${who} send selectors all missed on ${host}; fell back to `
+      + `"${resolution.selector}". Clicking send is still guarded, but the `
+      + `adapter needs updating -- please report this.`;
+  }
+  return `WARNING: ${who} found NO send control on ${host}. Pressing Enter is `
+    + `still guarded; clicking the send button is NOT. Please report this.`;
+}
+
 export function healthLine(host, adapter, resolution) {
   if (!adapter) {
     return resolution.via

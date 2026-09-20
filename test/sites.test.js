@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 
 import {
   ADAPTERS, adapterFor, resolveComposer, findComposer, findSendButton, healthLine,
+  resolveSendControl, sendHealthLine,
   resolveSendTarget, isSendTarget, SEND_HINTS,
 } from '../src/sites/index.js';
 
@@ -128,6 +129,72 @@ test('healthLine warns loudest when the page is not protected at all', () => {
   const line = healthLine('copilot.microsoft.com', a, { via: null, selector: null });
   assert.ok(line.startsWith('WARNING'));
   assert.match(line, /NOT protecting/);
+});
+
+// ------------------------------------------------- send-control health --
+// The composer had health reporting from the first commit; the send control
+// had none, and that asymmetry is what let the missing-click-listener bug
+// live. A stale send selector means the click is never recognised as a send:
+// no dialog, no warning, and Enter still works, which makes it harder to
+// notice rather than easier.
+
+test('a disabled send control still counts as FOUND', () => {
+  // The distinction the whole feature turns on. findSendButton skips
+  // disabled controls because it is about clicking one; at startup the send
+  // button is usually disabled precisely because the box is empty. Reusing
+  // it here would have warned about drift on every quiet page, and a health
+  // line that cries wolf is worth less than no health line.
+  const a = adapterFor('chatgpt.com');
+  const btn = { disabled: true };
+  const doc = docWith({ [a.sendButtonSelectors[0]]: btn });
+
+  assert.equal(findSendButton(doc, a), null, 'not clickable, correctly');
+  assert.equal(resolveSendControl(doc, a).via, 'site', 'but present, so healthy');
+  assert.equal(sendHealthLine('chatgpt.com', a, resolveSendControl(doc, a)), null);
+});
+
+test('send health is silent when the adapter resolved cleanly', () => {
+  const a = adapterFor('claude.ai');
+  const doc = docWith({ [a.sendButtonSelectors[0]]: {} });
+  assert.equal(sendHealthLine('claude.ai', a, resolveSendControl(doc, a)), null,
+    'a healthy page must not gain a second console line');
+});
+
+test('send health warns, and names the hint, when adapter selectors miss', () => {
+  const a = adapterFor('gemini.google.com');
+  // None of gemini's own selectors match; a generic hint does.
+  const doc = docWith({ '[aria-label*="send" i]': {} });
+  const res = resolveSendControl(doc, a);
+  assert.equal(res.via, 'hint');
+  const line = sendHealthLine('gemini.google.com', a, res);
+  assert.match(line, /^WARNING/);
+  assert.match(line, /gemini adapter/);
+  assert.match(line, /aria-label/, 'must name the fallback that caught it');
+});
+
+test('send health warns LOUDEST when no send control exists at all', () => {
+  const a = adapterFor('copilot.microsoft.com');
+  const res = resolveSendControl(docWith({}), a);
+  assert.equal(res.via, null);
+  const line = sendHealthLine('copilot.microsoft.com', a, res);
+  assert.match(line, /^WARNING/);
+  assert.match(line, /Enter is still guarded/,
+    'it must say what still works, not just what does not');
+  assert.match(line, /clicking the send button is NOT/i);
+});
+
+test('every send health line is ASCII', () => {
+  // Project rule: anything printed must survive a non-UTF-8 Windows console.
+  const a = adapterFor('gemini.google.com');
+  for (const res of [
+    resolveSendControl(docWith({ '[aria-label*="send" i]': {} }), a),
+    resolveSendControl(docWith({}), a),
+    resolveSendControl(docWith({}), null),
+  ]) {
+    const line = sendHealthLine('x.test', a, res) || '';
+    // eslint-disable-next-line no-control-regex
+    assert.ok(!/[^\x00-\x7F]/.test(line), `non-ASCII in: ${line}`);
+  }
 });
 
 test('healthLine handles an unknown host with and without a composer', () => {
