@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 
 import {
   ADAPTERS, adapterFor, resolveComposer, findComposer, findSendButton, healthLine,
+  resolveSendTarget, isSendTarget, SEND_HINTS,
 } from '../src/sites/index.js';
 
 /** A document stand-in that only knows about the selectors it is given. */
@@ -148,4 +149,89 @@ test('manifest content-script matches cover every adapter host', async () => {
         `manifest has no match pattern for ${host} -- the adapter would never run`);
     }
   }
+});
+
+// ------------------------------- the real claude.ai send control, 2026-09-20 --
+//
+// Read off the live DOM with tools/verify-selectors.js. Pinned here because
+// it is the one send control anyone has actually looked at, and because two
+// of its properties are the whole reason the button bug existed:
+//
+//   type="button"   -- NOT type="submit"
+//   not in a <form> -- so no submit event is ever fired
+//
+// A listener on `submit` alone could not have seen this button in principle.
+// ChatGPT's composer IS a form, which is why the gap looked like it did not
+// exist.
+
+/** Faithful stand-in for the live claude.ai send button. */
+function realClaudeSendButton() {
+  const attrs = {
+    'data-testid': 'chat-input-send',
+    'aria-label': 'Send message',
+    type: 'button',
+  };
+  return {
+    tagName: 'BUTTON',
+    disabled: false,
+    getAttribute: (k) => attrs[k] ?? null,
+    closest(sel) {
+      if (sel === 'form') return null;                    // NOT in a form
+      if (/chat-input-send/.test(sel)) return this;
+      if (/data-testid\*=["']?send/i.test(sel)) return this;
+      if (/aria-label="Send message"/.test(sel)) return this;
+      if (/aria-label\*=["']?send/i.test(sel)) return this;
+      if (/type="submit"/.test(sel)) return null;         // type is "button"
+      return null;
+    },
+  };
+}
+
+test('the claude adapter resolves the real send button', () => {
+  const btn = realClaudeSendButton();
+  const { el, via } = resolveSendTarget(btn, adapterFor('claude.ai'));
+  assert.equal(el, btn);
+  assert.equal(via, 'site', 'should match the adapter, not fall back to a hint');
+});
+
+test('the real claude send button is not in a form and is not type=submit', () => {
+  // The two facts that made a submit-only listener structurally incapable of
+  // seeing it. If either ever changes, the comment above is stale.
+  const btn = realClaudeSendButton();
+  assert.equal(btn.closest('form'), null);
+  assert.equal(btn.getAttribute('type'), 'button');
+});
+
+test('a LOCALISED send button still resolves', () => {
+  // Someone running Claude in French has aria-label="Envoyer le message".
+  // Every English label selector misses them -- which would be silent
+  // non-protection aimed squarely at non-English speakers. The test id is
+  // not translated, which is why it is tried first.
+  const french = {
+    tagName: 'BUTTON',
+    disabled: false,
+    getAttribute: (k) => (k === 'data-testid' ? 'chat-input-send'
+      : k === 'aria-label' ? 'Envoyer le message' : null),
+    closest(sel) {
+      if (/chat-input-send/.test(sel)) return this;
+      if (/data-testid\*=["']?send/i.test(sel)) return this;
+      return null;                       // no English label to match on
+    },
+  };
+  assert.ok(isSendTarget(french, adapterFor('claude.ai')),
+    'a translated UI must still be protected');
+});
+
+test('SEND_HINTS put locale-independent selectors first', () => {
+  const firstAria = SEND_HINTS.findIndex((s) => s.includes('aria-label'));
+  const firstTestId = SEND_HINTS.findIndex((s) => s.includes('data-testid'));
+  assert.ok(firstTestId < firstAria,
+    'a test id is never translated; an aria-label always is');
+});
+
+test('a click on something else is never a send', () => {
+  const other = { closest: () => null };
+  assert.equal(isSendTarget(other, adapterFor('claude.ai')), false);
+  assert.equal(isSendTarget(null, adapterFor('claude.ai')), false);
+  assert.equal(isSendTarget({}, adapterFor('claude.ai')), false);
 });

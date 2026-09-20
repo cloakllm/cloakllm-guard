@@ -11,7 +11,10 @@
 // unverified until someone signs in and checks:
 //
 //   chatgpt   VERIFIED on the live site, 2026-09-11
-//   claude    inferred (ProseMirror)  -- needs a live check
+//   claude    VERIFIED on the live site, 2026-09-20 -- all three composer
+//             selectors hit; the send control is
+//             button[data-testid="chat-input-send"], aria-label
+//             "Send message", type="button", and NOT inside a <form>
 //   gemini    inferred (Quill .ql-editor) -- needs a live check
 //   copilot   inferred -- needs a live check
 //
@@ -62,6 +65,12 @@ export const ADAPTERS = [
       'div[contenteditable="true"]',
     ],
     sendButtonSelectors: [
+      // data-testid first, and deliberately. An aria-label is LOCALISED:
+      // someone using Claude in French has aria-label="Envoyer le message"
+      // and every English label selector below misses them entirely --
+      // silent non-protection for anyone not using the product in English.
+      // A test id is not translated. Read off the live DOM 2026-09-20.
+      'button[data-testid="chat-input-send"]',
       'button[aria-label="Send message"]',
       'button[aria-label="Send Message"]',
       'fieldset button[type="submit"]',
@@ -113,10 +122,17 @@ export const FALLBACK_SELECTORS = [
  * because screen readers depend on it. Matching what assistive technology
  * matches is the most stable contract a page offers.
  */
+// Ordered by how well each survives translation. A test id is written by
+// the developer and never localised; an aria-label is written for the
+// user and always is. Someone running Claude in French has
+// aria-label="Envoyer le message", so the English hints below would miss
+// them completely -- which is silent non-protection, the worst failure
+// this extension has, aimed squarely at non-English speakers.
 export const SEND_HINTS = [
+  '[data-testid*="send" i]',
+  '[data-testid*="submit" i]',
   'button[type="submit"]',
   '[aria-label*="send" i]',
-  '[data-testid*="send" i]',
   '[title*="send" i]',
 ];
 

@@ -38,8 +38,8 @@
         'form button[type="submit"]'],
     },
   };
-  const SEND_HINTS = ['button[type="submit"]', '[aria-label*="send" i]',
-    '[data-testid*="send" i]', '[title*="send" i]'];
+  const SEND_HINTS = ['[data-testid*="send" i]', '[data-testid*="submit" i]',
+    'button[type="submit"]', '[aria-label*="send" i]', '[title*="send" i]'];
 
   let host = location.host;
   let cfg = ADAPTERS[host];
@@ -64,14 +64,20 @@
   for (const sel of cfg.send) {
     const el = document.querySelector(sel);
     if (el && !send) send = el;
-    line(!!el, sel + (el && el.disabled ? '   [disabled -- type something first]' : ''));
+    line(!!el, sel + (el && el.disabled ? '   [present but disabled right now]' : ''));
   }
 
   console.log('\nSEND CONTROL via generic hints (the fallback that ships)');
   for (const sel of SEND_HINTS) {
-    const els = [...document.querySelectorAll(sel)].filter((e) => !e.disabled);
-    line(els.length > 0, sel + '   (' + els.length + ' enabled)');
-    if (!send && els.length) send = els[els.length - 1];
+    // Report present-but-disabled distinctly. The first live run showed
+    // every hint as MISS purely because the send button was disabled at
+    // that instant, which reads as 'we would not protect this page' when
+    // the truth is the opposite. The shipped matcher does not filter on
+    // disabled, so neither should the diagnostic.
+    const all = [...document.querySelectorAll(sel)];
+    const live = all.filter((e) => !e.disabled);
+    line(all.length > 0, sel + '   (' + all.length + ' found, ' + live.length + ' enabled)');
+    if (!send && all.length) send = live[live.length - 1] || all[all.length - 1];
   }
 
   if (send) {
