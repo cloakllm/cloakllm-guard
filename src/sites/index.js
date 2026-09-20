@@ -6,17 +6,44 @@
 // is a one-file fix, not an archaeology expedition.
 //
 // SELECTOR PROVENANCE. Every AI chat site except ChatGPT gates its composer
-// behind a login, so the selectors below could not be read off a live DOM and
-// are INFERRED from each site's known editor technology. Treat them as
-// unverified until someone signs in and checks:
+// behind a login, so these selectors began as INFERENCES from each site's
+// known editor technology rather than readings off a live DOM. All four have
+// now been checked by someone signed in, but the checks differ in depth and
+// the difference matters -- see the locale note below:
 //
-//   chatgpt   VERIFIED on the live site, 2026-09-11
+//   chatgpt   VERIFIED on the live site, 2026-09-11, re-checked 2026-09-20
 //   claude    VERIFIED on the live site, 2026-09-20 -- all three composer
 //             selectors hit; the send control is
 //             button[data-testid="chat-input-send"], aria-label
 //             "Send message", type="button", and NOT inside a <form>
-//   gemini    inferred (Quill .ql-editor) -- needs a live check
-//   copilot   inferred -- needs a live check
+//   gemini    VERIFIED on the live site, 2026-09-20 (pass/fail only -- the
+//             element attributes were not captured, so the locale note below
+//             stands unresolved for this adapter)
+//   copilot   VERIFIED on the live site, 2026-09-20 (pass/fail only)
+//
+// LOCALE RISK, gemini specifically. "Passed" was measured on an English UI,
+// and that is not the same as "works". The claude.ai run taught this the
+// hard way: reading its OUTPUT -- not its pass/fail -- revealed that every
+// send selector we had was an English aria-label, so anyone running the site
+// in another language matched nothing and was silently unprotected. The fix
+// was to put data-testid first everywhere, because a test id is written by a
+// developer and never translated while an aria-label is written for the user
+// and always is.
+//
+// Gemini has no data-testid to put first. Its send control resolves through
+// `button.send-button` (a CSS class -- structural, the kind this file
+// otherwise avoids) and then `button[aria-label="Send message"]` (English).
+// The generic SEND_HINTS behind those are data-testid, type="submit", and
+// English aria-label/title -- none of which a localised Angular send button
+// is likely to carry. So for a non-English Gemini user, click-path
+// protection rests entirely on that one class name.
+//
+// Copilot is fine by comparison: data-testid first, and a locale-proof
+// `form button[type="submit"]` at the back.
+//
+// To close it, someone with Gemini open needs the send button's real
+// attributes -- specifically whether it carries a data-testid or any other
+// stable non-translated hook.
 //
 // That is precisely why `resolveComposer` reports HOW it resolved. Guessing
 // well is not the goal; noticing when the guess stopped working is, because
