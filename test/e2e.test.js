@@ -118,7 +118,10 @@ function makeHarness() {
 
   const sandbox = {
     console: { log: (...a) => logs.push(a.join(' ')), warn: (...a) => logs.push(a.join(' ')) },
-    location: { host: 'chatgpt.com' },
+    // pathname matters: an acknowledgement is scoped to the conversation it
+    // was made in, and these sites change conversation by client-side routing
+    // without ever reloading the page.
+    location: { host: 'chatgpt.com', pathname: '/c/first-conversation' },
     URL, setTimeout, clearTimeout, Promise,
     KeyboardEvent: class { constructor(type, init) { Object.assign(this, init, { type }); } },
     document,
@@ -603,6 +606,36 @@ test('THE DIALOG IS CLICKABLE: our own send gate must not eat its buttons', asyn
     assert.equal(ev.prevented, false,
       `nor prevented (${sel})`);
   }
+});
+
+test('AN ACKNOWLEDGEMENT DOES NOT FOLLOW YOU INTO ANOTHER CONVERSATION', async () => {
+  // "I meant to send that card" is a decision about one conversation, not a
+  // standing permission to put the same card anywhere. These sites route
+  // client-side, so without a scope the acknowledgement survived for as long
+  // as the tab stayed open -- including into a brand new chat.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  h.handlers.keydown[0](enterEvent(h.composer));
+  await tick(10);
+  h.stubs.get('.send').click();
+  await tick(10);
+  assert.equal(h.sendButton.clicks, 1, 'confirming must actually send');
+
+  // Same text, same tab, same page -- still covered.
+  const sameChat = enterEvent(h.composer);
+  h.handlers.keydown[0](sameChat);
+  assert.equal(sameChat.prevented, false, 'still approved in this conversation');
+
+  // The person starts a new chat. No page reload; only the URL changes.
+  h.sandbox.location.pathname = '/c/second-conversation';
+
+  const newChat = enterEvent(h.composer);
+  h.handlers.keydown[0](newChat);
+  assert.equal(newChat.prevented, true,
+    'the same PII sent into a DIFFERENT conversation must be warned about again');
 });
 
 test('AN UNREADABLE COMPOSER IS NOT A CLEAN ONE', async () => {
