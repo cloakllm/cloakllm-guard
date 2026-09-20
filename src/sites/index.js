@@ -18,6 +18,15 @@
 // That is precisely why `resolveComposer` reports HOW it resolved. Guessing
 // well is not the goal; noticing when the guess stopped working is, because
 // the worst failure this extension has is silent non-protection.
+//
+// SEND CONTROLS are resolved the same way, and the same reasoning applies
+// twice over: an external review (2026-09-18) found the claude.ai send
+// BUTTON was never intercepted at all while Enter was. The cause was not a
+// stale selector but a missing `click` listener -- ChatGPT's composer is a
+// real <form>, so its button fired `submit` and appeared to work, which
+// hid the gap everywhere that isn't a form. See resolveSendTarget below:
+// the adapter's selectors are tried first, then SEND_HINTS, which are
+// semantic rather than structural so they survive a redesign.
 
 /**
  * @typedef {Object} SiteAdapter
@@ -94,6 +103,50 @@ export const FALLBACK_SELECTORS = [
   '[contenteditable="true"]',
   'textarea',
 ];
+
+/**
+ * Generic ways a send control identifies itself, tried after the adapter's
+ * own selectors.
+ *
+ * Deliberately semantic rather than structural. claude.ai's class names are
+ * build-hashed and churn with every deploy; an accessible label does not,
+ * because screen readers depend on it. Matching what assistive technology
+ * matches is the most stable contract a page offers.
+ */
+export const SEND_HINTS = [
+  'button[type="submit"]',
+  '[aria-label*="send" i]',
+  '[data-testid*="send" i]',
+  '[title*="send" i]',
+];
+
+/**
+ * Is this click on something that sends the message?
+ *
+ * Walks up from the clicked node first: a click almost never lands on the
+ * button itself but on an icon or span inside it.
+ *
+ * @param {any} target the event target
+ * @param {SiteAdapter | null} adapter
+ * @returns {{ el: any, via: 'site'|'hint'|null }}
+ */
+export function resolveSendTarget(target, adapter) {
+  if (!target || typeof target.closest !== 'function') return { el: null, via: null };
+  for (const sel of (adapter && adapter.sendButtonSelectors ? adapter.sendButtonSelectors : [])) {
+    const el = target.closest(sel);
+    if (el) return { el, via: 'site' };
+  }
+  for (const sel of SEND_HINTS) {
+    const el = target.closest(sel);
+    if (el) return { el, via: 'hint' };
+  }
+  return { el: null, via: null };
+}
+
+/** Element-only form of resolveSendTarget. */
+export function isSendTarget(target, adapter) {
+  return resolveSendTarget(target, adapter).el !== null;
+}
 
 /**
  * @param {string} host

@@ -16,7 +16,10 @@
 // findings, this script does nothing at all to the event. That keeps the
 // common path completely free of any risk of breaking the site.
 import { textFromPaste, textFromComposer, isSendKey } from '../shared/extract.js';
-import { adapterFor, findComposer, findSendButton, resolveComposer, healthLine } from '../sites/index.js';
+import {
+  adapterFor, findComposer, findSendButton, resolveComposer, healthLine,
+  isSendTarget,
+} from '../sites/index.js';
 import { lookup, acknowledge, scanAndCache, scheduleScan, invalidateVerdicts } from './scan-cache.js';
 import { showWarning, isOpen } from './warn-ui.js';
 
@@ -29,8 +32,26 @@ function composerText(target) {
   return textFromComposer(el);
 }
 
+// True only while we are re-dispatching the person's own send after they
+// confirmed it. Every gate below checks this FIRST and stands aside.
+//
+// Without it the click path eats itself: resumeSend() calls btn.click(),
+// our own capture listener sees that click, and blocks the very send it
+// was asked to let through. Synchronous, because btn.click() dispatches
+// synchronously.
+let resuming = false;
+
 /** Resume a send the person confirmed. */
 function resumeSend() {
+  resuming = true;
+  try {
+    return dispatchSend();
+  } finally {
+    resuming = false;
+  }
+}
+
+function dispatchSend() {
   const btn = findSendButton(document, adapter);
   if (btn) { btn.click(); return true; }
   // Fallback: synthetic Enter on the composer. Less reliable (isTrusted is
@@ -57,7 +78,23 @@ function shouldBlock(text) {
   return state === 'findings' || state === 'unknown';
 }
 
+// One send gesture can fire several events -- pointerdown then click, or a
+// click that a site turns into a submit. Without this, one press of the
+// button would stack two or three dialogs on top of each other. Set
+// synchronously at the moment we decide to block, so it is already true by
+// the time the next event in the same gesture arrives.
+let handling = false;
+
 async function handleBlockedSend(text, trigger) {
+  handling = true;
+  try {
+    await runBlockedSend(text, trigger);
+  } finally {
+    handling = false;
+  }
+}
+
+async function runBlockedSend(text, trigger) {
   let { state, summary } = lookup(text);
 
   if (state === 'unknown') {
@@ -114,6 +151,7 @@ document.addEventListener('input', (ev) => {
 
 // --- send: the gate -------------------------------------------------------
 document.addEventListener('keydown', (ev) => {
+  if (resuming) return;          // our own synthetic Enter, on their behalf
   if (isOpen()) {
     // Our own dialog is up; never let a keystroke reach the site underneath.
     if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); }
@@ -128,7 +166,9 @@ document.addEventListener('keydown', (ev) => {
 }, true);
 
 document.addEventListener('submit', (ev) => {
+  if (resuming) return;          // the resumed click may submit a form
   if (isOpen()) { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
+  if (handling) { ev.preventDefault(); ev.stopImmediatePropagation(); return; }
   const el = findComposer(ev.target || document, adapter) || findComposer(document, adapter);
   const text = textFromComposer(el);
   if (!shouldBlock(text)) return;
@@ -136,6 +176,44 @@ document.addEventListener('submit', (ev) => {
   ev.stopImmediatePropagation();
   handleBlockedSend(text, 'submit');
 }, true);
+
+// --- send: the button ------------------------------------------------------
+// Added after an external review found the claude.ai send button was never
+// intercepted while Enter was. The cause was not a stale selector: there was
+// no click listener at all. ChatGPT's composer is a real <form>, so its
+// button fired `submit` and was caught by the handler above -- which made
+// the gap invisible on the one site anyone had tested.
+//
+// This matters more than a missing path usually would. A guard that is
+// fail-open on the most common way people send is worse than no guard,
+// because the dialog on the Enter path teaches someone the extension is
+// watching and they stop checking their own prompts.
+//
+// pointerdown is covered as well as click, because a site that acts on
+// pointerdown would otherwise have sent before our click handler ran. Both
+// go through the same `handling` guard, so one gesture raises one dialog.
+function onSendClick(ev) {
+  if (resuming) return;          // the person's own confirmed send
+  if (isOpen() || handling) {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    return;
+  }
+  // Only primary, unmodified clicks. Ctrl+click or a middle click is not a
+  // send, and intercepting them would break ordinary browsing.
+  if (ev.button !== undefined && ev.button !== 0) return;
+  if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+  if (!isSendTarget(ev.target, adapter)) return;
+
+  const text = textFromComposer(findComposer(document, adapter));
+  if (!shouldBlock(text)) return;
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  handleBlockedSend(text, 'click');
+}
+
+document.addEventListener('pointerdown', onSendClick, true);
+document.addEventListener('click', onSendClick, true);
 
 // --- settings changes -----------------------------------------------------
 // A verdict cached under the old settings can be stale-permissive, so drop it.

@@ -26,7 +26,30 @@ function makeHarness() {
   const logs = [];
   const sentMessages = [];
   const messageListeners = [];
-  const sendButton = { disabled: false, clicks: 0, click() { this.clicks += 1; } };
+  // `closest` matters now that clicks are intercepted: a real click lands on
+  // the icon inside the button, never the button itself, so the handler walks
+  // up from the target. Modelled the way the DOM behaves -- this stub answers
+  // to the selectors a send control actually carries.
+  const sendButton = {
+    disabled: false,
+    clicks: 0,
+    click() {
+      // A real button dispatches a click that our own CAPTURE listener sees
+      // before the site's own handler does. If we stop propagation there,
+      // the site never learns about the send -- so `clicks` counts sends the
+      // site actually received, not sends we attempted.
+      //
+      // Counting before dispatch (the obvious way to write this) made the
+      // resume-loop test below pass whether or not the guard existed, which
+      // is worse than not having the test.
+      const ev = clickEventOn(this);
+      for (const fn of (handlers.click || [])) fn(ev);
+      if (!ev.stopped) this.clicks += 1;
+    },
+    closest(sel) {
+      return /send|submit/i.test(sel) ? this : null;
+    },
+  };
   const composer = { value: '', isContentEditable: false };
   const stubs = new Map();
   const shadow = {
@@ -97,6 +120,18 @@ function enterEvent(target) {
     prevented: false, stopped: false,
     preventDefault() { this.prevented = true; },
     stopImmediatePropagation() { this.stopped = true; },
+  };
+}
+
+/** A left-click, the way a person sends by pressing the button. */
+function clickEventOn(target, over = {}) {
+  return {
+    type: 'click', target, button: 0,
+    ctrlKey: false, metaKey: false, shiftKey: false, altKey: false,
+    prevented: false, stopped: false,
+    preventDefault() { this.prevented = true; },
+    stopImmediatePropagation() { this.stopped = true; },
+    ...over,
   };
 }
 
@@ -305,3 +340,130 @@ test('a broken worker releases the send rather than bricking the chat', async ()
   assert.ok(h.logs.some((l) => l.includes('scan unavailable')), 'and it must be logged');
 });
 
+// ----------------------------------------------------- the send BUTTON --
+//
+// An external review driving a real Chrome (2026-09-18) found the claude.ai
+// send button was never intercepted while Enter was. The cause was not a
+// stale selector: there was NO click listener at all. ChatGPT wraps its
+// composer in a real <form>, so its button fired `submit` and was caught by
+// the handler above -- which hid the gap on the one site anyone had tested.
+//
+// A guard that is fail-open on the most common way people send is worse than
+// no guard, because the dialog on the Enter path teaches someone the
+// extension is watching and they stop checking their own prompts.
+
+test('registers click and pointerdown handlers', () => {
+  // The gap itself, at its simplest. This one assertion would have caught
+  // the reported bug.
+  const h = makeHarness();
+  for (const type of ['click', 'pointerdown']) {
+    assert.ok(h.handlers[type], `missing ${type} handler`);
+  }
+});
+
+test('a DIRTY send by BUTTON is stopped', async () => {
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  const ev = clickEventOn(h.sendButton);
+  h.handlers.click[0](ev);
+  await tick(10);
+
+  assert.ok(ev.prevented, 'the click must be prevented');
+  assert.ok(ev.stopped, 'and must not reach the site');
+  assert.ok(h.stubs.size > 0, 'the dialog should have been built');
+});
+
+test('a CLEAN send by BUTTON is not touched', async () => {
+  // The other half, and the more important one: this extension must have no
+  // way of breaking an ordinary message.
+  const h = makeHarness();
+  h.composer.value = CLEAN;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  const ev = clickEventOn(h.sendButton);
+  h.handlers.click[0](ev);
+  await tick(10);
+
+  assert.equal(ev.prevented, false);
+  assert.equal(ev.stopped, false);
+  assert.equal(h.stubs.size, 0, 'no dialog for a clean message');
+});
+
+test('a click that is not the send control is ignored', async () => {
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  const elsewhere = { closest: () => null };
+  const ev = clickEventOn(elsewhere);
+  h.handlers.click[0](ev);
+  await tick(10);
+
+  assert.equal(ev.prevented, false, 'ordinary clicks must pass through');
+  assert.equal(h.stubs.size, 0);
+});
+
+test('modified and non-primary clicks are not sends', async () => {
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  for (const over of [{ button: 1 }, { ctrlKey: true }, { metaKey: true }]) {
+    const ev = clickEventOn(h.sendButton, over);
+    h.handlers.click[0](ev);
+    await tick(5);
+    assert.equal(ev.prevented, false, JSON.stringify(over));
+  }
+});
+
+test('one gesture raises one dialog, not three', async () => {
+  // pointerdown, then click, then a submit the site derives from it. Without
+  // the in-flight guard each would open its own interstitial on top of the
+  // last.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  h.handlers.pointerdown[0](clickEventOn(h.sendButton));
+  h.handlers.click[0](clickEventOn(h.sendButton));
+  h.handlers.submit[0](clickEventOn(h.sendButton));
+  await tick(20);
+
+  const decisions = h.sentMessages.filter((m) => m.type === 'cloakllm:record').length;
+  assert.ok(decisions <= 1, `expected at most one recorded decision, got ${decisions}`);
+});
+
+test('THE RESUME LOOP: confirming a button-send actually sends it', async () => {
+  // The bug this nearly shipped with. resumeSend() calls btn.click(), our own
+  // capture listener sees that click, and blocks the very send it was asked
+  // to let through -- so "Send anyway" would silently do nothing at all. The
+  // stub button replays its click into the handlers precisely so that this
+  // is reachable from a test rather than only from a real browser.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  h.handlers.click[0](clickEventOn(h.sendButton));
+  await tick(10);
+  assert.ok(h.stubs.size > 0, 'dialog should be open');
+
+  const before = h.sendButton.clicks;
+  let sendControl = null;
+  for (const [sel, el] of h.stubs) {
+    if (/send/i.test(sel) && el.listeners && el.listeners.click) sendControl = el;
+  }
+  assert.ok(sendControl, 'interstitial should offer a send-anyway control');
+  for (const fn of sendControl.listeners.click) fn({});
+  await tick(20);
+
+  assert.ok(h.sendButton.clicks > before,
+    'the confirmed send must reach the site button');
+});
