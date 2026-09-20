@@ -21,6 +21,27 @@ export function isOpen() {
 }
 
 /**
+ * Did this event come from our own dialog?
+ *
+ * The send gate blocks every click and Enter in the document while a warning
+ * is up, so that a second send cannot slip past underneath it. Without this
+ * check it also blocked the warning's OWN buttons: the person could neither
+ * confirm nor edit, and since the text stayed in the box and every further
+ * attempt re-raised the dialog, a flagged message could not be sent at all.
+ * That turns the coach into a cop, which is the one thing this must not be.
+ *
+ * Answerable from outside the shadow tree only because the root is CLOSED:
+ * an event raised inside it has already been retargeted to the host element
+ * by the time any document-level listener sees it.
+ */
+export function isOwnEvent(ev) {
+  const t = ev && ev.target;
+  if (!t) return false;
+  if (t.id === HOST_ID) return true;
+  return typeof t.closest === 'function' && !!t.closest(`#${HOST_ID}`);
+}
+
+/**
  * Show the pre-send warning.
  *
  * @param {{ categories: string[], byCategory: Record<string, {count:number}> }} summary

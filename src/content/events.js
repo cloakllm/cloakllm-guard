@@ -24,7 +24,7 @@ import {
   lookup, acknowledge, scanAndCache, scheduleScan, invalidateVerdicts,
   isContextInvalidated,
 } from './scan-cache.js';
-import { showWarning, showUnavailable, isOpen } from './warn-ui.js';
+import { showWarning, showUnavailable, isOpen, isOwnEvent } from './warn-ui.js';
 
 const adapter = adapterFor(location.host);
 
@@ -173,6 +173,10 @@ document.addEventListener('input', (ev) => {
 // --- send: the gate -------------------------------------------------------
 document.addEventListener('keydown', (ev) => {
   if (resuming) return;          // our own synthetic Enter, on their behalf
+  // Enter on a focused dialog button is how a keyboard user answers the
+  // warning. Blocking it left them with no way to confirm at all -- worse
+  // than the mouse case, since the dialog focuses its own button on open.
+  if (isOwnEvent(ev)) return;
   if (isOpen()) {
     // Our own dialog is up; never let a keystroke reach the site underneath.
     if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); }
@@ -215,6 +219,9 @@ document.addEventListener('submit', (ev) => {
 // go through the same `handling` guard, so one gesture raises one dialog.
 function onSendClick(ev) {
   if (resuming) return;          // the person's own confirmed send
+  // Our own dialog's buttons. Must come BEFORE the isOpen() block below,
+  // which is what was swallowing them -- see isOwnEvent().
+  if (isOwnEvent(ev)) return;
   if (isOpen() || handling) {
     ev.preventDefault();
     ev.stopImmediatePropagation();

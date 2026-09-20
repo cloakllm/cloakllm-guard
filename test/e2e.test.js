@@ -52,6 +52,7 @@ function makeHarness() {
   };
   const composer = { value: '', isContentEditable: false };
   const stubs = new Map();
+  let host = null;              // the shadow HOST, set when the dialog is built
   const shadow = {
     set innerHTML(_) { /* markup is not asserted on */ },
     querySelector(sel) {
@@ -61,6 +62,29 @@ function makeHarness() {
           listeners: {},
           addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
           focus() { this.focused = true; },
+          /**
+           * Click this control the way a browser would.
+           *
+           * Calling `listeners.click[0]()` directly -- the obvious way, and
+           * what every test here used to do -- skips the part that matters.
+           * A real click inside the dialog is seen FIRST by our own
+           * document-level capture listeners, retargeted to the shadow host
+           * because the root is closed, and only reaches the button if they
+           * let it through. Ours did not: the send gate blocks every click
+           * while a warning is open, so it swallowed the warning's own
+           * buttons and a flagged message could not be sent at all. Every
+           * assertion in this file passed throughout.
+           */
+          click() {
+            // Outside the shadow tree the event is retargeted to the host.
+            const outer = clickEventOn(host);
+            for (const fn of (handlers.click || [])) fn(outer);
+            if (outer.stopped) return false;
+            // Inside it, the listener sees the real element.
+            const inner = clickEventOn(this, { currentTarget: this });
+            for (const fn of (this.listeners.click || [])) fn(inner);
+            return true;
+          },
         });
       }
       return stubs.get(sel);
@@ -70,11 +94,18 @@ function makeHarness() {
   const document = {
     addEventListener: (type, fn) => { (handlers[type] ||= []).push(fn); },
     removeEventListener: () => {},
-    createElement: () => ({
-      style: {}, id: '',
-      attachShadow: () => shadow,
-      remove() { this.removed = true; },
-    }),
+    createElement: () => {
+      // Kept, because a click inside a CLOSED shadow root retargets to this
+      // element by the time a document-level listener sees it -- which is
+      // both how the bug above happened and how the fix recognises its own
+      // dialog. warn-ui sets `id` to the host id right after this returns.
+      host = {
+        style: {}, id: '',
+        attachShadow: () => shadow,
+        remove() { this.removed = true; },
+      };
+      return host;
+    },
     documentElement: { appendChild: () => {} },
     querySelector(sel) {
       if (sel.includes('send-button') || sel.includes('submit')) return sendButton;
@@ -209,7 +240,7 @@ test('cancelling leaves the text alone and sends nothing', async () => {
   h.handlers.keydown[0](enterEvent(h.composer));
   await tick(10);
 
-  h.stubs.get('.cancel').listeners.click[0]();
+  h.stubs.get('.cancel').click();
   await tick(10);
 
   assert.equal(h.sendButton.clicks, 0, 'cancel must not send');
@@ -224,7 +255,7 @@ test('"send anyway" resumes the send, and the same text is not re-warned', async
   h.handlers.keydown[0](enterEvent(h.composer));
   await tick(10);
 
-  h.stubs.get('.send').listeners.click[0]();
+  h.stubs.get('.send').click();
   await tick(10);
   assert.equal(h.sendButton.clicks, 1, 'confirming must actually send');
 
@@ -241,7 +272,7 @@ test('editing after an acknowledgement brings the guard back', async () => {
   await tick(200);
   h.handlers.keydown[0](enterEvent(h.composer));
   await tick(10);
-  h.stubs.get('.send').listeners.click[0]();
+  h.stubs.get('.send').click();
   await tick(10);
 
   // A DIFFERENT card must not inherit the previous "send anyway".
@@ -285,7 +316,7 @@ test('an acknowledgement survives a settings change', async () => {
   await tick(200);
   h.handlers.keydown[0](enterEvent(h.composer));
   await tick(10);
-  h.stubs.get('.send').listeners.click[0]();
+  h.stubs.get('.send').click();
   await tick(10);
 
   h.messageListeners[0]({ type: 'cloakllm:settingsChanged' });
@@ -302,7 +333,7 @@ test('a warning decision is reported for the log', async () => {
   await tick(200);
   h.handlers.keydown[0](enterEvent(h.composer));
   await tick(10);
-  h.stubs.get('.cancel').listeners.click[0]();
+  h.stubs.get('.cancel').click();
   await tick(10);
 
   const rec = h.sentMessages.find((m) => m.type === 'cloakllm:record');
@@ -522,11 +553,75 @@ test('THE RESUME LOOP: confirming a button-send actually sends it', async () => 
     if (/send/i.test(sel) && el.listeners && el.listeners.click) sendControl = el;
   }
   assert.ok(sendControl, 'interstitial should offer a send-anyway control');
-  for (const fn of sendControl.listeners.click) fn({});
+  // Through the real click path. Invoking the listener directly (what this
+  // line used to do) skips our own document-level capture listeners, which
+  // is where the send gate lives -- and is why the gate swallowing this very
+  // button went unnoticed until someone clicked it in a browser.
+  assert.equal(sendControl.click(), true,
+    'the click must actually reach the button, not be eaten by our own gate');
   await tick(20);
 
   assert.ok(h.sendButton.clicks > before,
     'the confirmed send must reach the site button');
+});
+
+test('THE DIALOG IS CLICKABLE: our own send gate must not eat its buttons', async () => {
+  // Found in a live browser on claude.ai, 2026-09-20, immediately after the
+  // send-button interception started working -- the two are the same bug seen
+  // from opposite sides. onSendClick blocks every click in the document while
+  // a warning is open, so that a second send cannot slip past underneath it.
+  // The dialog lives in the document too.
+  //
+  // Consequence was worse than "a button does nothing": the text stays in the
+  // box, every further attempt re-raises the dialog, and Escape only cancels.
+  // A flagged message could not be sent AT ALL. That is a coach turning into
+  // a cop, which this product must never do -- fail-open on the ACTION is the
+  // whole design.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  h.handlers.click[0](clickEventOn(h.sendButton));
+  await tick(10);
+  assert.ok(h.stubs.has('.send') && h.stubs.has('.cancel'), 'dialog should be open');
+
+  // The real test: a click on each control survives our capture listeners.
+  for (const sel of ['.cancel', '.send']) {
+    const ev = clickEventOn(h.sandbox.document.createElement());
+    ev.target.id = 'cloakllm-guard-root';
+    for (const fn of (h.handlers.click || [])) fn(ev);
+    assert.equal(ev.stopped, false,
+      `a click inside our own dialog must not be stopped (${sel})`);
+    assert.equal(ev.prevented, false,
+      `nor prevented (${sel})`);
+  }
+});
+
+test('the dialog is reachable by KEYBOARD too', async () => {
+  // The dialog focuses its own cancel button on open, so Enter is how a
+  // keyboard user answers it. The keydown gate blocks Enter while a warning
+  // is up -- for the site underneath, correctly -- and was blocking it for
+  // the dialog as well, leaving keyboard users no way to confirm at all.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.handlers.input[0]({ target: h.composer });
+  await tick(200);
+
+  h.handlers.click[0](clickEventOn(h.sendButton));
+  await tick(10);
+  assert.ok(h.stubs.size > 0, 'dialog should be open');
+
+  const host = h.sandbox.document.createElement();
+  host.id = 'cloakllm-guard-root';
+  const ev = enterEvent(host);
+  for (const fn of (h.handlers.keydown || [])) fn(ev);
+  assert.equal(ev.stopped, false, 'Enter inside our own dialog must get through');
+
+  // And the site underneath is still protected, which is what the gate is for.
+  const under = enterEvent(h.composer);
+  for (const fn of (h.handlers.keydown || [])) fn(under);
+  assert.equal(under.stopped, true, 'Enter on the page underneath is still blocked');
 });
 
 test('an ORPHANED content script says so, and does not retry', async () => {
