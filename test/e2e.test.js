@@ -263,6 +263,13 @@ test('"send anyway" resumes the send, and the same text is not re-warned', async
   const again = enterEvent(h.composer);
   h.handlers.keydown[0](again);
   assert.equal(again.prevented, false, 'acknowledged text must not be re-warned');
+
+  // ...and it must SAY it did that. This behaviour was reported as a bug --
+  // correctly, in the sense that from outside there was no way to tell
+  // "allowed, you approved this" from "the guard missed it". A tool whose
+  // value is trust in its silence cannot afford an unexplained silence.
+  assert.ok(h.logs.some((l) => /already approved/.test(l)),
+    'a send allowed by a prior decision must explain itself');
 });
 
 test('editing after an acknowledgement brings the guard back', async () => {

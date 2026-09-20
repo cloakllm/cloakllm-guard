@@ -75,6 +75,17 @@ function dispatchSend() {
 function shouldBlock(text) {
   if (!text || !text.trim()) return false;
   const { state } = lookup(text);
+  // Say so when a send passes BECAUSE it was already approved.
+  //
+  // Added after this was reported as a bug: re-sending the identical text
+  // went through with no dialog, and from outside there is no way to tell
+  // "allowed, you approved this exact text" from "the guard missed it". For
+  // a tool whose value is trust in its own silence, an unexplained silence
+  // is a defect even when the behaviour is correct. No text is logged --
+  // only the fact that a prior decision was applied.
+  if (state === 'acknowledged') {
+    console.log('[CloakLLM Guard] sending text you already approved; not asking again');
+  }
   // 'clean' and 'acknowledged' pass straight through untouched.
   // 'findings' and 'unknown' are both blocked -- claiming clean on an unknown
   // would silently void the guarantee for anyone who types fast.
