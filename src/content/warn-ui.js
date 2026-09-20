@@ -27,6 +27,47 @@ export function isOpen() {
  * @returns {Promise<'send'|'cancel'>}
  */
 export function showWarning(summary) {
+  return showDialog({
+    title: 'Hold on &mdash; this looks like personal data',
+    body: 'What you are about to send appears to contain <span class="found"></span>.',
+    found: describe(summary.categories, summary.byCategory),
+    note: 'Checked on your machine. Nothing was sent, stored, or reported.',
+  });
+}
+
+/**
+ * Show the "could not check this" dialog.
+ *
+ * Added 2026-09-20 after a live run on claude.ai released a message
+ * containing a card number with nothing but a console warning to show for
+ * it. The old path did `console.warn(...)` and sent -- invisible to anyone
+ * who is not looking at DevTools, while the extension carried on reporting
+ * itself as watching the page.
+ *
+ * Fail-open on the ACTION is still right: a broken worker must not brick
+ * someone's chat, and "Send anyway" is always one click away. Fail-open on
+ * the INFORMATION is not. If we could not check, the person is the only one
+ * who can decide, and they cannot decide something nobody told them about.
+ *
+ * @param {'reloaded'|'unavailable'} reason
+ * @returns {Promise<'send'|'cancel'>}
+ */
+export function showUnavailable(reason) {
+  const body = reason === 'reloaded'
+    ? 'CloakLLM Guard was updated or restarted, so it could not check this '
+      + 'message. <span class="found">Reload this page</span> to start '
+      + 'checking again.'
+    : 'CloakLLM Guard could not check this message, so it does not know '
+      + 'whether it contains personal data.';
+  return showDialog({
+    title: 'Could not check this message',
+    body,
+    found: '',
+    note: 'Nothing was sent, stored, or reported. You can still send it.',
+  });
+}
+
+function showDialog({ title, body, found, note }) {
   if (active) return Promise.resolve('cancel');
 
   return new Promise((resolve) => {
@@ -79,19 +120,21 @@ export function showWarning(summary) {
       <div class="backdrop" part="backdrop">
         <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="t">
           <div class="tag">CloakLLM Guard</div>
-          <h2 id="t">Hold on &mdash; this looks like personal data</h2>
-          <p>What you are about to send appears to contain
-             <span class="found"></span>.</p>
+          <h2 id="t">${title}</h2>
+          <p class="body">${body}</p>
           <div class="row">
             <button class="send" type="button">Send anyway</button>
             <button class="cancel" type="button">Let me edit it</button>
           </div>
-          <p class="note">Checked on your machine. Nothing was sent, stored, or reported.</p>
+          <p class="note">${note}</p>
         </div>
       </div>`;
 
-    root.querySelector('.found').textContent =
-      describe(summary.categories, summary.byCategory);
+    // textContent, never innerHTML: `found` is the only value derived from
+    // what the person wrote (category NAMES and counts, never the matched
+    // text), and it is the one place markup injection could matter.
+    const slot = root.querySelector('.found');
+    if (slot) slot.textContent = found;
 
     const finish = (choice) => {
       if (!active) return;

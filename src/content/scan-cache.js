@@ -26,25 +26,62 @@ let cached = null;
 const acknowledged = new Set();
 let timer = null;
 
-/** Ask the service worker to scan. Resolves to a summary. */
+/**
+ * Has this content script been orphaned by an extension reload?
+ *
+ * Reloading an unpacked extension leaves every already-open tab running the
+ * OLD content script with no way to reach the worker: chrome.runtime.id
+ * goes undefined and sendMessage fails forever. It is unrecoverable from
+ * here and the fix is a page refresh, so it is worth telling apart from a
+ * worker that is merely asleep.
+ */
+export function isContextInvalidated() {
+  try {
+    return !(chrome && chrome.runtime && chrome.runtime.id);
+  } catch {
+    return true;
+  }
+}
+
+/** Ask the service worker to scan. Resolves to a summary, or null. */
 export function requestScan(text, trigger) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'cloakllm:scan', trigger, text }, (result) => {
-      if (chrome.runtime.lastError || !result) {
-        // Worker asleep or extension reloading. Resolve as "unknown" rather
-        // than "clean" -- claiming clean on an error is the one failure that
-        // silently voids the guarantee.
-        resolve(null);
-        return;
-      }
-      resolve(result);
-    });
+    try {
+      chrome.runtime.sendMessage({ type: 'cloakllm:scan', trigger, text }, (result) => {
+        if (chrome.runtime.lastError || !result) {
+          // Worker asleep or extension reloading. Resolve as "unknown"
+          // rather than "clean" -- claiming clean on an error is the one
+          // failure that silently voids the guarantee.
+          resolve(null);
+          return;
+        }
+        resolve(result);
+      });
+    } catch {
+      // sendMessage THROWS, rather than calling back, once the context is
+      // invalidated. Without this the promise never settles and the send
+      // hangs instead of failing.
+      resolve(null);
+    }
   });
 }
 
-/** Scan now and populate the cache. */
+/**
+ * Scan now and populate the cache.
+ *
+ * Retries once. MV3 evicts a service worker after about thirty seconds
+ * idle, and the first message after eviction can fail while Chrome is
+ * still waking it. That transient is by far the most common cause of a
+ * failed scan, and retrying it keeps the "could not check" dialog for
+ * cases that are actually broken -- a dialog people see on ordinary sends
+ * is one they learn to click through.
+ */
 export async function scanAndCache(text, trigger) {
-  const summary = await requestScan(text, trigger);
+  let summary = await requestScan(text, trigger);
+  if (!summary && !isContextInvalidated()) {
+    await new Promise((r) => setTimeout(r, 50));
+    summary = await requestScan(text, trigger);
+  }
   if (summary) cached = { hash: hashText(text), summary };
   return summary;
 }

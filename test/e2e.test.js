@@ -93,6 +93,11 @@ function makeHarness() {
     document,
     chrome: {
       runtime: {
+        // A live content script always has this. Its ABSENCE is precisely
+        // how an orphaned script (extension reloaded under an open tab)
+        // is detected, so the harness has to model it or every test runs
+        // as if the extension had just been reloaded.
+        id: 'cloakllm-guard-test',
         lastError: null,
         sendMessage(msg, cb) {
           sentMessages.push(msg);
@@ -326,18 +331,74 @@ test('an unscanned send is blocked pending a scan, then released if clean', asyn
   assert.equal(h.sendButton.clicks, 1, 'once scanned and clean, the send resumes');
 });
 
-test('a broken worker releases the send rather than bricking the chat', async () => {
-  // Failing closed here would mean our own error silently stops someone from
-  // using their chat at all. Release, and say so.
+test('a broken worker ASKS before sending, and never releases silently', async () => {
+  // Rewritten 2026-09-20. This test used to assert the opposite -- that a
+  // failed scan released the send with only a console.warn -- and a live run
+  // on claude.ai showed what that means in practice: a message containing a
+  // card number went to the model, with nothing visible to show for it,
+  // while the extension carried on reporting that it was watching the page.
+  // The product's own failure mode producing the exact leak it exists to
+  // prevent.
+  //
+  // Fail-open on the ACTION is still right: "Send anyway" is one click away
+  // and a broken worker must never brick someone's chat. Fail-open on the
+  // INFORMATION is not. If we could not check, only the person can decide.
   const h = makeHarness();
   h.composer.value = DIRTY;
-  h.sandbox.chrome.runtime.sendMessage = (msg, cb) => cb(undefined);
+  h.sandbox.chrome.runtime.sendMessage = (msg, cb) => { if (cb) cb(undefined); };
 
   h.handlers.keydown[0](enterEvent(h.composer));
-  await tick(10);
+  await tick(120);   // long enough for the retry
 
-  assert.equal(h.sendButton.clicks, 1, 'the send must not be held hostage to our error');
+  assert.equal(h.sendButton.clicks, 0, 'nothing may be sent before the person answers');
+  assert.ok(h.stubs.size > 0, 'the person must be told we could not check');
   assert.ok(h.logs.some((l) => l.includes('scan unavailable')), 'and it must be logged');
+});
+
+test('after being told, "send anyway" still works', async () => {
+  // The other half: being honest must not become bricking the chat.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.sandbox.chrome.runtime.sendMessage = (msg, cb) => { if (cb) cb(undefined); };
+
+  h.handlers.keydown[0](enterEvent(h.composer));
+  await tick(120);
+
+  let control = null;
+  for (const [sel, el] of h.stubs) {
+    if (/send/i.test(sel) && el.listeners && el.listeners.click) control = el;
+  }
+  assert.ok(control, 'the dialog must offer a way through');
+  for (const fn of control.listeners.click) fn({});
+  await tick(20);
+
+  assert.equal(h.sendButton.clicks, 1, 'the person can always proceed');
+});
+
+test('the scan is retried once before giving up', async () => {
+  // MV3 evicts a service worker after about thirty seconds idle, and the
+  // first message after eviction can fail while Chrome is still waking it.
+  // Without a retry that transient becomes a dialog on an ordinary send --
+  // and a dialog people see when nothing is wrong is one they learn to
+  // click through, which is how this kind of tool dies.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  let attempts = 0;
+  const real = h.sandbox.chrome.runtime.sendMessage;
+  h.sandbox.chrome.runtime.sendMessage = (msg, cb) => {
+    if (msg.type !== 'cloakllm:scan') { if (cb) cb({ ok: true }); return; }
+    attempts += 1;
+    if (attempts === 1) { if (cb) cb(undefined); return; }   // first try fails
+    real(msg, cb);                                            // second succeeds
+  };
+
+  h.handlers.keydown[0](enterEvent(h.composer));
+  await tick(150);
+
+  assert.equal(attempts, 2, 'a transient failure should be retried');
+  assert.ok(h.stubs.size > 0, 'and the real findings dialog shown, not "could not check"');
+  assert.ok(!h.logs.some((l) => l.includes('scan unavailable')),
+    'a recovered scan must not report itself as unavailable');
 });
 
 // ----------------------------------------------------- the send BUTTON --
@@ -466,4 +527,48 @@ test('THE RESUME LOOP: confirming a button-send actually sends it', async () => 
 
   assert.ok(h.sendButton.clicks > before,
     'the confirmed send must reach the site button');
+});
+
+test('an ORPHANED content script says so, and does not retry', async () => {
+  // Reloading an unpacked extension leaves every already-open tab running
+  // the OLD content script with no way to reach the worker. This is what
+  // actually happened on the live claude.ai run: chrome.runtime.id goes
+  // undefined, sendMessage fails forever, and retrying cannot help.
+  //
+  // Worth telling apart from a sleeping worker, because the fix is
+  // different and the person can act on it: refresh the page.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  delete h.sandbox.chrome.runtime.id;            // orphaned
+  let attempts = 0;
+  h.sandbox.chrome.runtime.sendMessage = (msg, cb) => {
+    if (msg.type === 'cloakllm:scan') attempts += 1;
+    if (cb) cb(undefined);
+  };
+
+  h.handlers.keydown[0](enterEvent(h.composer));
+  await tick(120);
+
+  assert.equal(attempts, 1, 'retrying an invalidated context is pointless');
+  assert.equal(h.sendButton.clicks, 0, 'and nothing may be sent unasked');
+  assert.ok(h.logs.some((l) => l.includes('reloaded')),
+    'the log should name the recoverable cause, not a generic failure');
+});
+
+test('sendMessage THROWING is handled, not left hanging', async () => {
+  // Once the context is invalidated sendMessage throws synchronously
+  // rather than calling back. Without the try/catch the promise never
+  // settles and the send hangs forever with the dialog never appearing --
+  // which looks, from the outside, exactly like the extension silently
+  // eating someone's message.
+  const h = makeHarness();
+  h.composer.value = DIRTY;
+  h.sandbox.chrome.runtime.sendMessage = (msg) => {
+    if (msg.type === 'cloakllm:scan') throw new Error('Extension context invalidated');
+  };
+
+  h.handlers.keydown[0](enterEvent(h.composer));
+  await tick(150);
+
+  assert.ok(h.stubs.size > 0, 'a throwing sendMessage must still reach a dialog');
 });

@@ -20,8 +20,11 @@ import {
   adapterFor, findComposer, findSendButton, resolveComposer, healthLine,
   isSendTarget,
 } from '../sites/index.js';
-import { lookup, acknowledge, scanAndCache, scheduleScan, invalidateVerdicts } from './scan-cache.js';
-import { showWarning, isOpen } from './warn-ui.js';
+import {
+  lookup, acknowledge, scanAndCache, scheduleScan, invalidateVerdicts,
+  isContextInvalidated,
+} from './scan-cache.js';
+import { showWarning, showUnavailable, isOpen } from './warn-ui.js';
 
 const adapter = adapterFor(location.host);
 
@@ -100,12 +103,30 @@ async function runBlockedSend(text, trigger) {
   if (state === 'unknown') {
     summary = await scanAndCache(text, 'send');
     if (!summary) {
-      // Scan failed outright. Do not hold the person's send hostage to our
-      // own error -- release it and stay quiet. Failing closed here would
-      // mean a broken worker silently bricks their chat.
-      console.warn('[CloakLLM Guard] scan unavailable, send released unchecked');
-      acknowledge(text);
-      resumeSend();
+      // The scan failed, after a retry. The old behaviour here was to
+      // console.warn and send -- which on a live run released a message
+      // containing a card number with nothing visible to show for it,
+      // while the extension carried on reporting that it was watching the
+      // page. That is the exact failure this product exists to prevent,
+      // produced by the product itself.
+      //
+      // Still fail-open on the ACTION: "Send anyway" is right there and a
+      // broken worker must never brick someone's chat. But not on the
+      // INFORMATION. If we could not check, only the person can decide,
+      // and they cannot decide something nobody told them about.
+      const reason = isContextInvalidated() ? 'reloaded' : 'unavailable';
+      console.warn(`[CloakLLM Guard] scan unavailable (${reason}); asking before sending`);
+      const proceed = await showUnavailable(reason);
+      chrome.runtime.sendMessage({
+        type: 'cloakllm:record',
+        summary: { total: 0, byCategory: {} },
+        trigger,
+        action: proceed === 'send' ? 'sent_unchecked' : 'heeded_unchecked',
+      }, () => void chrome.runtime.lastError);
+      if (proceed === 'send') {
+        acknowledge(text);
+        resumeSend();
+      }
       return;
     }
     if (summary.total === 0) { resumeSend(); return; }
