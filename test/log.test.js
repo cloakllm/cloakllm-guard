@@ -187,3 +187,26 @@ test('clear wipes everything', async () => {
   assert.deepEqual(await allEntries(), []);
   assert.equal((await stats()).shown, 0);
 });
+
+// ---------------------------------------------- errors must be reportable --
+
+test('safeError strips anything that could be user text', async () => {
+  // Added after a live run where the worker stopped answering and six catch
+  // blocks discarded the reason, leaving nothing in any console to diagnose
+  // from. Logging the error is the fix -- but this is a tool whose whole
+  // claim is that what you type never reaches a log, so the message is
+  // scrubbed rather than trusted.
+  const { safeError } = await import('../src/worker/index.js');
+  if (!safeError) return;   // not exported in this build
+
+  const dirty = new Error(
+    'failed on marie.dubois@example-eu.fr with card 5500000000000004 and 4155550199');
+  const out = safeError(dirty);
+
+  assert.ok(!out.includes('marie.dubois@example-eu.fr'), 'email must be stripped');
+  assert.ok(!out.includes('5500000000000004'), 'card digits must be stripped');
+  assert.ok(!out.includes('4155550199'), 'phone digits must be stripped');
+  assert.match(out, /\[email\]/);
+  assert.match(out, /\[digits\]/);
+  assert.ok(out.length <= 300, 'and it must stay bounded');
+});

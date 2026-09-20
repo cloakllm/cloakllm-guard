@@ -87,6 +87,33 @@ async function notifyTabs() {
   } catch { /* no tabs to tell; caches also expire as soon as the text changes */ }
 }
 
+
+/**
+ * Make an error safe to print.
+ *
+ * Errors from our own code do not embed what someone typed, but "do not"
+ * is an assumption and this is a tool whose entire claim is that your text
+ * never leaves your machine or reaches a log. So the assumption is removed
+ * rather than relied on: long digit runs and anything email-shaped are
+ * stripped before the message is printed.
+ *
+ * Added after a live run where the worker stopped answering and SIX
+ * catch blocks in this file discarded the reason, leaving nothing in any
+ * console to diagnose from. A silent catch in the component that makes the
+ * safety decision is the same failure as a silent fail-open, one layer down.
+ */
+export function safeError(err) {
+  const raw = err && err.message ? String(err.message) : String(err);
+  return raw
+    .replace(/[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[email]')
+    .replace(/\d{4,}/g, '[digits]')
+    .slice(0, 300);
+}
+
+function reportFailure(what, err) {
+  console.warn(`[CloakLLM Guard] ${what} failed: ${err && err.name ? err.name : 'Error'}: ${safeError(err)}`);
+}
+
 // --- wiring ---------------------------------------------------------------
 // Guarded so this module can also be imported by tests outside an extension.
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
@@ -113,25 +140,29 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
       }
 
       case 'cloakllm:stats':
-        stats().then(sendResponse).catch(() => sendResponse(null));
+        stats().then(sendResponse)
+          .catch((err) => { reportFailure('stats', err); sendResponse(null); });
         return true;
 
       case 'cloakllm:export':
-        exportJsonl(msg.epoch).then(sendResponse).catch(() => sendResponse(null));
+        exportJsonl(msg.epoch).then(sendResponse)
+          .catch((err) => { reportFailure('export', err); sendResponse(null); });
         return true;
 
       case 'cloakllm:clear':
-        clear().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+        clear().then(() => sendResponse({ ok: true }))
+          .catch((err) => { reportFailure('clear', err); sendResponse({ ok: false }); });
         return true;
 
       case 'cloakllm:getSettings':
-        currentSettings().then(sendResponse).catch(() => sendResponse(null));
+        currentSettings().then(sendResponse)
+          .catch((err) => { reportFailure('getSettings', err); sendResponse(null); });
         return true;
 
       case 'cloakllm:setSettings':
         saveSettings(msg.patch)
           .then(async (next) => { invalidate(); await notifyTabs(); sendResponse(next); })
-          .catch(() => sendResponse(null));
+          .catch((err) => { reportFailure('saveSettings', err); sendResponse(null); });
         return true;
 
       case 'cloakllm:scan':
@@ -150,7 +181,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
             );
           }
           sendResponse(result);
-        }).catch(() => sendResponse(null));
+        }).catch((err) => { reportFailure('scan', err); sendResponse(null); });
         return true;
 
       default:
