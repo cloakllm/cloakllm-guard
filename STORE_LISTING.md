@@ -14,14 +14,16 @@ CloakLLM Guard
 ## Short description (132 characters max)
 
 ```
-Catches personal data before you send it to an AI chat. Checks locally - nothing is sent, stored, or reported anywhere.
+Catches personal data before you send it to an AI chat. The check runs locally; the extension never sends or stores what you type.
 ```
 
-*(118 characters.)*
+*(130 characters.)* **This is also `manifest.json`'s `description`, which the store shows under the title and which cannot be edited in the dashboard -- the two must match (test-enforced).** The earlier manifest text said the extension warns "before you paste"; it warns before you SEND.
 
 ## Category
 
-Productivity — Workflow & Planning
+**Privacy & Security** if the dashboard offers it (it describes the extension better); otherwise Productivity — Workflow & Planning.
+
+**Language:** English.
 
 ## Detailed description
 
@@ -30,9 +32,10 @@ CloakLLM Guard checks what you are about to send to ChatGPT, Claude, Gemini or
 Microsoft Copilot, and stops you if it contains personal data.
 
 Paste a customer record into a chat box and press send, and instead of the
-message going out you get a question: "this looks like it contains a credit
-card number and an email address - send anyway?" You can always say yes. It is
-a seatbelt, not a lock.
+message going out, Guard stops and asks: "Hold on - this looks like personal
+data. What you are about to send appears to contain a credit card number and
+an email address." You choose "Let me edit it" or "Send anyway", and you can
+always send. It is a seatbelt, not a lock.
 
 THREE THINGS IT NEVER DOES
 
@@ -43,12 +46,12 @@ THREE THINGS IT NEVER DOES
 - Report to anyone. It warns you. Your employer does not get a copy.
 
 Detection runs entirely in your browser, using the detection engine from
-CloakLLM, an open-source compliance toolkit used to keep personal data out of
+CloakLLM, an open-source compliance toolkit built to keep personal data out of
 AI audit logs.
 
 WHAT IT CATCHES
 
-Credit card numbers, IBANs, national ID numbers, API keys, AWS access keys,
+Credit card numbers, IBANs, US Social Security numbers, API keys, AWS access keys,
 access tokens, email addresses and phone numbers. Every category can be turned
 off individually - if something is noisy in your work, silence it. A warning
 you learn to ignore is worse than no warning.
@@ -58,8 +61,11 @@ WHAT IT CANNOT SEE
 Browser tabs only. It cannot see the ChatGPT or Claude desktop apps, Copilot or
 Cursor inside your editor, anything sent directly from code, or anything on
 another device. That is a real limit, and we would rather you knew it now than
-found out later. If a tool tells you it covers everything, it is not reading
-your IDE either.
+found out later.
+
+It also does not recognise names, postal addresses or dates of birth. It
+catches the structured kinds of data listed above; a person's name on its own
+will not trigger a warning.
 
 YOUR OWN RECORD
 

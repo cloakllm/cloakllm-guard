@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CloakLLM Guard",
   "version": "0.1.0",
-  "description": "Warns you before you paste personal data into an AI chat. Detection runs locally; nothing is sent anywhere.",
+  "description": "Catches personal data before you send it to an AI chat. The check runs locally; the extension never sends or stores what you type.",
   "minimum_chrome_version": "111",
   "permissions": ["storage"],
   "icons": {

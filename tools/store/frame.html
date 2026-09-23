@@ -136,7 +136,7 @@
       root.innerHTML = copy(
         'Stops personal data before it reaches an AI chat.',
         'Press send with a card number, an IBAN, an email address or an API key in the box, and Guard asks first. You decide what happens next.',
-        ['Checked on your machine', 'Nothing you write is stored or sent anywhere', '&ldquo;Send anyway&rdquo; is always one click away'],
+        ['Checked on your machine', 'The extension never stores or sends what you write', '&ldquo;Send anyway&rdquo; is always one click away'],
       );
       framed({ src: 'chat.html', left: 500, top: 100, width: 720, height: 600 });
     }
@@ -209,7 +209,7 @@
       document.body.classList.add('tile');
       root.innerHTML = `<div class="t-inner">${BRAND}
         <h1>Stops personal data before it reaches AI chats.</h1>
-        <p class="sub">Local checks. Nothing stored or sent.</p></div>`;
+        <p class="sub">Checks run locally. Never sends or stores what you type.</p></div>`;
     }
 
     window.__READY = true;

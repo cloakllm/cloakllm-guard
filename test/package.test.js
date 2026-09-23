@@ -125,6 +125,20 @@ test('the short description fits the store limit', () => {
   assert.ok(m[1].length <= 132, `short description is ${m[1].length} chars, limit is 132`);
 });
 
+test('the store summary IS the manifest description, word for word', () => {
+  // The dashboard shows manifest.json's `description` under the title and
+  // does not let you edit it there. The listing doc had one short
+  // description and the manifest another -- and the manifest's said the
+  // extension warns "before you paste", when it warns before you SEND.
+  // Two copies of a public sentence drift; this makes them one.
+  const listing = read('STORE_LISTING.md');
+  const m = listing.match(/## Short description[^\r\n]*(?:\r?\n)+```\r?\n([\s\S]*?)\r?\n```/);
+  assert.ok(m, 'short description block not found');
+  assert.equal(manifest.description, m[1],
+    'manifest.json description and STORE_LISTING.md short description differ');
+  assert.ok(manifest.description.length <= 132);
+});
+
 test('the extension declares no host permissions beyond its content scripts', () => {
   // Broad host_permissions are the single biggest review risk. If one ever
   // appears it should be a deliberate decision, not a drift.
