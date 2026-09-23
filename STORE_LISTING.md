@@ -134,6 +134,27 @@ perform the check and then discarded — nothing is retained or transmitted.
 Must be publicly reachable before submission. `PRIVACY.md` is the content;
 `https://cloakllm.dev/guard/privacy` is the suggested home.
 
+## Homepage and support URLs
+
+- **Official URL:** `cloakllm.dev` (verified in Search Console)
+- **Homepage URL:** `https://cloakllm.dev/guard`
+- **Support URL:** `https://cloakllm.dev/guard/support`
+
+Both live since 2026-09-23. The homepage says "Chrome Web Store listing in
+review" instead of linking to a store page that does not exist yet -- set
+`STORE_URL` in `cloakllm-web/src/app/guard/page.tsx` once the listing is live,
+and add `/guard` to the site nav at the same time.
+
+The support page quotes the extension's own messages word for word (from
+`src/content/warn-ui.js`, `src/ui/popup.html`, `src/sites/index.js`). If that
+wording changes, change the page too. Its first instruction is never to
+include the message or any personal data in a report.
+
+Security reports currently go to `team@cloakllm.dev`: GitHub's private
+vulnerability reporting is OFF on the org's repos, so the channel named in
+`CloakLLM/SECURITY.md` does not work for an outside reporter until it is
+enabled.
+
 ## Assets
 
 **Done 2026-09-23.** Upload these from `store/`:

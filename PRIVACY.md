@@ -1,6 +1,6 @@
 # Privacy policy — CloakLLM Guard
 
-Last updated: 15 September 2026
+Last updated: 23 September 2026
 
 ## The short version
 
@@ -50,8 +50,8 @@ Nothing.
 
 There is no endpoint to send to. The extension requests no host permissions
 beyond the sites it watches, and it makes no `fetch` or `XMLHttpRequest` calls
-of its own. You can verify this: the source is public, and the build fails if a
-network or Node API appears in the bundled detection code.
+of its own. You can verify this: the source is public, and the test suite fails
+if network code appears anywhere in the shipped extension.
 
 ## Permissions, and why each is needed
 
