@@ -183,6 +183,28 @@ the code before it was written, and the checkable ones are asserted by
 If any of these stops being true, the screenshots must be regenerated
 **before** the next listing update, not after.
 
+## Trader status (EU Digital Services Act)
+
+**Declared: non-trader** (2026-09-23). Published by an individual, before
+any company is registered, as a free MIT-licensed open-source extension.
+That is a defensible reading of "acting outside trade, business, craft or
+profession", but a grey area rather than a clear-cut one.
+
+Consequence: the listing shows EU users a notice that the publisher has not
+identified as a trader and that EU consumer-protection rights do not apply.
+
+**Switch to trader when EITHER happens** (Developer Dashboard -> Settings ->
+Trader declaration):
+1. CloakLLM is registered as a company -- then verify as an ORGANIZATION
+   with the registration certificate (no D-U-N-S number needed), so the
+   public name, address and phone are the company's, not a person's.
+2. The extension becomes part of a paid offering (e.g. the managed Guard
+   edition).
+
+Note for whoever does it: a Google payments profile's type (individual vs
+business) is understood to be permanent once created, so create a business
+profile at that point rather than reusing a personal one.
+
 ## Unresolved before anyone submits
 
 1. ~~Repo name and public URL~~ — **done 2026-09-15:**
