@@ -95,14 +95,18 @@ policy already said so; this now matches it.)*
 **Host access to the listed AI chat sites**
 ```
 The extension's single purpose is to check a message before it is sent to an AI
-chat service. It needs to read the composer contents on those specific sites at
-the moment of sending in order to do that. No other sites are requested, and
-the text is discarded immediately after it is checked.
+chat service. To do that it reads the contents of the message box on these six
+sites only: as the user types or pastes, so the check is ready, and when they
+press send. The text is checked on the device and discarded immediately. It is
+never stored or transmitted. No other sites are requested.
 ```
 
 **Single purpose statement**
 ```
-Warn the user before they send personal data to an AI chat service.
+Warn the user before they send personal data - such as card numbers, IBANs, email
+addresses, phone numbers or API keys - in a message to an AI chat service
+(ChatGPT, Claude, Gemini, Microsoft Copilot). The message is checked on the
+user's device when they press send, and they choose to edit it or send it anyway.
 ```
 
 **Remote code**
