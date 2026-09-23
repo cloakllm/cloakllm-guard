@@ -59,13 +59,14 @@ function renderCategories(settings) {
 }
 
 function renderSites() {
-  const hosts = [];
-  for (const a of ADAPTERS) {
-    for (const h of ['chatgpt.com', 'chat.openai.com', 'claude.ai',
-      'gemini.google.com', 'copilot.microsoft.com', 'm365.cloud.microsoft']) {
-      if (a.matches(h) && !hosts.includes(h)) hosts.push(h);
-    }
-  }
+  // Read the adapters' own host lists. This used to probe `a.matches(h)`
+  // against a hard-coded array of six hosts kept right here -- a second
+  // source of truth that could drift from the adapters silently, listing a
+  // site the extension no longer watches or omitting one it does.
+  //
+  // `hosts` became an enumerable array on every adapter in v0.12.6 exactly
+  // so nothing needs its own copy; this page was still carrying one.
+  const hosts = [...new Set(ADAPTERS.flatMap((a) => a.hosts))];
   $('sites').replaceChildren(...hosts.map((h) => {
     const li = document.createElement('li');
     li.textContent = h;
@@ -78,8 +79,26 @@ if (settings) {
   renderCategories(settings);
   $('logEnabled').checked = !!settings.logEnabled;
   $('logEnabled').addEventListener('change', async () => {
-    await ask({ type: 'cloakllm:setSettings', patch: { logEnabled: $('logEnabled').checked } });
-    say('Saved');
+    const next = await ask({
+      type: 'cloakllm:setSettings', patch: { logEnabled: $('logEnabled').checked },
+    });
+    // Do not claim "Saved" for a write that was never acknowledged.
+    say(next ? 'Saved' : 'Could not save -- the background service did not respond');
   });
+} else {
+  // The worker never answered. Previously this branch did not exist: the
+  // category list simply rendered empty under its heading, and the logging
+  // checkbox sat there UNCHECKED -- stating that the findings log was off
+  // when the truth was that nothing was known. A settings page that
+  // misreports a setting is worse than one that admits it cannot load.
+  $('cats').replaceChildren(Object.assign(document.createElement('li'), {
+    className: 'cat-note',
+    textContent: 'Could not load your settings -- the background service did not respond. '
+      + 'Nothing here has been changed. Try disabling and re-enabling the extension.',
+  }));
+  const box = $('logEnabled');
+  box.checked = false;
+  box.indeterminate = true;   // unknown, not "off"
+  box.disabled = true;
 }
 renderSites();

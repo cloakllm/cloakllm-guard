@@ -26,7 +26,26 @@ const dayOf = (iso) => {
 };
 
 function render(s) {
-  if (!s || s.shown === 0) {
+  // "Could not ask" and "asked, nothing to report" are different facts, and
+  // until 2026-09-23 they rendered identically: a worker that never answered
+  // produced the "Nothing caught yet. Guard is watching your AI chats" card.
+  // So a broken extension reassured the person it was protecting them. That
+  // is the same fail-open the content script was fixed for -- open on the
+  // ACTION is fine, open on the INFORMATION is not -- and it is worse here,
+  // because this surface exists precisely to answer "is it working?".
+  if (!s) {
+    $('unreachable').hidden = false;
+    $('empty').hidden = true;
+    $('summary').hidden = true;
+    $('export').disabled = true;
+    $('clear').disabled = true;
+    $('period').textContent = '';
+    return;
+  }
+
+  $('unreachable').hidden = true;
+
+  if (s.shown === 0) {
     $('empty').hidden = false;
     $('summary').hidden = true;
     $('export').disabled = true;

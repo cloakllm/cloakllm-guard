@@ -24,6 +24,8 @@
     .empty { background: var(--raised); border: 1px solid var(--line); border-radius: 8px;
              padding: 14px; margin: 0 0 14px; }
     .empty p { margin: 0; font-size: 12px; }
+    /* A failure must not look like a clean bill of health. */
+    .unreachable { border-color: var(--danger, #f87171); }
 
     .row { display: flex; gap: 8px; margin: 0 0 12px; }
     .row button { flex: 1; }
@@ -52,6 +54,21 @@
   <div class="empty" id="empty">
     <p>Nothing caught yet. Guard is watching your AI chats and will step in
        before personal data is sent.</p>
+  </div>
+
+  <!--
+    Distinct from #empty, deliberately. Until 2026-09-23 a worker that never
+    answered rendered the "Nothing caught yet" card above, so a BROKEN
+    extension told you it was watching. For a tool whose whole value is
+    trust, a false reassurance is worse than an error.
+  -->
+  <div class="empty unreachable" id="unreachable" hidden>
+    <p><strong>Guard could not reach its background service.</strong></p>
+    <p class="note" style="margin-top:6px">
+      It cannot tell you what it has caught, and it may not be checking your
+      messages. Reload the page you were on; if that does not help, disable
+      and re-enable the extension.
+    </p>
   </div>
 
   <div class="row">
