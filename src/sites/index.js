@@ -58,6 +58,8 @@
 // the adapter's selectors are tried first, then SEND_HINTS, which are
 // semantic rather than structural so they survive a redesign.
 
+import { HELP } from '../shared/support.js';
+
 /**
  * @typedef {Object} SiteAdapter
  * @property {string} id
@@ -314,10 +316,10 @@ export function sendHealthLine(host, adapter, resolution) {
   if (resolution.via === 'hint') {
     return `WARNING: ${who} send selectors all missed on ${host}; fell back to `
       + `"${resolution.selector}". Clicking send is still guarded, but the `
-      + `adapter needs updating -- please report this.`;
+      + `adapter needs updating -- please report this: ${HELP.report}`;
   }
   return `WARNING: ${who} found NO send control on ${host}. Pressing Enter is `
-    + `still guarded; clicking the send button is NOT. Please report this.`;
+    + `still guarded; clicking the send button is NOT. Please report this: ${HELP.report}`;
 }
 
 export function healthLine(host, adapter, resolution) {
@@ -330,8 +332,8 @@ export function healthLine(host, adapter, resolution) {
   if (resolution.via === 'fallback') {
     return `WARNING: ${adapter.id} adapter selectors all missed on ${host}; `
       + `fell back to "${resolution.selector}". The site layout probably changed `
-      + `-- protection is degraded, please report this.`;
+      + `-- protection is degraded, please report this: ${HELP.report}`;
   }
   return `WARNING: ${adapter.id} adapter found no composer on ${host} `
-    + `-- NOT protecting this page. Please report this.`;
+    + `-- NOT protecting this page. Please report this: ${HELP.report}`;
 }

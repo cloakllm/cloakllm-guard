@@ -12,6 +12,13 @@ Copy for the developer dashboard. **Nothing here has been submitted.** Review
 > `cloakllm-web/src/app/guard/page.tsx` and add `/guard` to the site nav.
 > If it was staged to publish later, it must be published within 30 days of
 > passing review or the staged version expires.
+>
+> **v0.1.1 is built and ready (`build/cloakllm-guard-0.1.1.zip`) -- do NOT
+> upload it while 0.1.0 is in review**, which would most likely restart the
+> review. Upload it as the first update once 0.1.0 is approved. It adds the
+> support-page link to every "please report this" message; the only web
+> address in its code is `https://cloakllm.dev/guard/support`, a link the user
+> clicks, so the "no remote code" answer is unchanged.
 
 ## Name
 
@@ -180,10 +187,10 @@ The support page quotes the extension's own messages word for word (from
 wording changes, change the page too. Its first instruction is never to
 include the message or any personal data in a report.
 
-Security reports currently go to `team@cloakllm.dev`: GitHub's private
-vulnerability reporting is OFF on the org's repos, so the channel named in
-`CloakLLM/SECURITY.md` does not work for an outside reporter until it is
-enabled.
+Security reports: GitHub private vulnerability reporting was OFF on every
+public repo in the org until 2026-09-23, so the channel in `SECURITY.md` did
+not work for an outside reporter. Now enabled on all seven and verified; the
+support page offers it alongside `team@cloakllm.dev`.
 
 ## Assets
 

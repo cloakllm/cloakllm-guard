@@ -26,6 +26,7 @@ import {
   isContextInvalidated,
 } from './scan-cache.js';
 import { showWarning, showUnavailable, isOpen, isOwnEvent } from './warn-ui.js';
+import { HELP } from '../shared/support.js';
 
 const adapter = adapterFor(location.host);
 
@@ -122,7 +123,7 @@ async function handleUnreadableSend(trigger) {
   try {
     console.warn(
       '[CloakLLM Guard] could not read the message box; asking before sending. '
-      + `The ${adapter ? adapter.id : 'site'} adapter may need updating.`
+      + `The ${adapter ? adapter.id : 'site'} adapter may need updating -- please report it: ${HELP.report}`
     );
     const proceed = await showUnavailable('unreadable');
     chrome.runtime.sendMessage({

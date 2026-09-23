@@ -4,6 +4,7 @@
 // IBANs" is the sentence the whole findings log exists to produce -- and it
 // says it without a single prompt having been collected.
 import { labelFor } from '../shared/labels.js';
+import { HELP } from '../shared/support.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -34,6 +35,9 @@ function render(s) {
   // ACTION is fine, open on the INFORMATION is not -- and it is worse here,
   // because this surface exists precisely to answer "is it working?".
   if (!s) {
+    // From the shared constant, so the popup cannot point somewhere
+    // different from the dialog and the console messages.
+    $('unreachableHelp').href = HELP.unreachable;
     $('unreachable').hidden = false;
     $('empty').hidden = true;
     $('summary').hidden = true;

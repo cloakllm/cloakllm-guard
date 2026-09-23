@@ -9,6 +9,7 @@
 // reach the DOM, so "we warn you without keeping what you wrote" is a property
 // of the code rather than a promise about it.
 import { describe } from '../shared/labels.js';
+import { HELP } from '../shared/support.js';
 
 const HOST_ID = 'cloakllm-guard-root';
 
@@ -91,15 +92,26 @@ export function showUnavailable(reason) {
     body = 'CloakLLM Guard could not check this message, so it does not know '
       + 'whether it contains personal data.';
   }
+  // A link to what to do for the two cases where the person has to act on
+  // something. 'reloaded' needs none: its own text already says to reload.
+  // Until v0.1.1 the 'unreadable' case said the extension needed an update
+  // and gave no way to tell anyone -- and that report is the only way a
+  // silent layout change on a chat site ever reaches us.
+  const help = reason === 'unreadable'
+    ? { href: HELP.couldNotCheck, text: 'Report this, so it can be fixed' }
+    : reason === 'reloaded'
+      ? null
+      : { href: HELP.couldNotCheck, text: 'What to do if this keeps happening' };
   return showDialog({
     title: 'Could not check this message',
     body,
     found: '',
     note: 'Nothing was sent, stored, or reported. You can still send it.',
+    help,
   });
 }
 
-function showDialog({ title, body, found, note }) {
+function showDialog({ title, body, found, note, help }) {
   if (active) return Promise.resolve('cancel');
 
   return new Promise((resolve) => {
@@ -148,12 +160,17 @@ function showDialog({ title, body, found, note }) {
         .send:hover { background: #27272a; color: #e4e4e7; }
         button:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
         .note { margin: 14px 0 0; font-size: 12px; color: #71717a; }
+        .help { margin: -4px 0 14px; font-size: 13px; }
+        .help a { color: #a78bfa; text-decoration: none; }
+        .help a:hover { text-decoration: underline; }
+        .help a:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; border-radius: 3px; }
       </style>
       <div class="backdrop" part="backdrop">
         <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="t">
           <div class="tag">CloakLLM Guard</div>
           <h2 id="t">${title}</h2>
           <p class="body">${body}</p>
+          ${help ? `<p class="help"><a href="${help.href}" target="_blank" rel="noopener noreferrer">${help.text}</a></p>` : ''}
           <div class="row">
             <button class="send" type="button">Send anyway</button>
             <button class="cancel" type="button">Let me edit it</button>
