@@ -1,0 +1,218 @@
+<!doctype html>
+<!--
+  Chrome Web Store screenshot compositions: a caption plus the REAL UI in an
+  iframe, at exactly the size the store requires.
+
+    ?shot=warning   the dialog mid-send (tools/store/chat.html)
+    ?shot=popup     the toolbar popup with a populated log
+    ?shot=settings  the options page
+    ?shot=privacy   what the extension is permitted to do -- read from the
+                    real manifest.json at render time, so it cannot drift
+    ?shot=tile      the 440x280 small promo tile
+
+  Every caption claim was checked against the code before it was written
+  (see STORE_LISTING.md, "Screenshot claims"). Source is ASCII-only; all
+  typography is entities.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>store shot</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; overflow: hidden; }
+    body {
+      width: 1280px; height: 800px; position: relative;
+      color: #fafafa;
+      font: 16px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background:
+        radial-gradient(900px 620px at 88% 18%, rgba(139,92,246,.24), transparent 62%),
+        radial-gradient(700px 500px at 0% 100%, rgba(139,92,246,.10), transparent 60%),
+        #111114;
+    }
+    body.tile { width: 440px; height: 280px; }
+
+    .copy { position: absolute; left: 80px; top: 0; bottom: 0; width: 380px;
+            display: flex; flex-direction: column; justify-content: center; }
+    .brand { font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+             color: #c4b5fd; margin: 0 0 18px; display: flex; align-items: center; gap: 10px; }
+    .brand img { width: 22px; height: 22px; }
+    h1 { font-size: 42px; line-height: 1.12; letter-spacing: -.015em; font-weight: 650;
+         margin: 0 0 18px; }
+    .sub { font-size: 18px; color: #a1a1aa; margin: 0; }
+    ul.facts { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 10px; }
+    ul.facts li { font-size: 15px; color: #d4d4d8; padding-left: 22px; position: relative; }
+    ul.facts li::before { content: ""; position: absolute; left: 2px; top: 9px;
+                          width: 8px; height: 8px; border-radius: 50%; background: #8b5cf6; }
+
+    .stage { position: absolute; }
+    .window { border-radius: 14px; overflow: hidden; background: #18181b;
+              box-shadow: 0 30px 90px rgba(0,0,0,.6), 0 0 0 1px #2f2f35; }
+    iframe { border: 0; display: block; background: #18181b; }
+
+    /* privacy card */
+    .card { background: #18181b; border: 1px solid #2f2f35; border-radius: 16px;
+            padding: 28px 30px; width: 560px;
+            box-shadow: 0 30px 90px rgba(0,0,0,.6); }
+    .card h2 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+               color: #71717a; margin: 0 0 12px; font-weight: 600; }
+    .perm { display: flex; justify-content: space-between; align-items: center;
+            background: #202024; border: 1px solid #2f2f35; border-radius: 10px;
+            padding: 12px 14px; margin: 0 0 8px; font-size: 15px; }
+    .perm code { font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace; color: #c4b5fd; }
+    .perm span { color: #a1a1aa; font-size: 13px; }
+    .none { color: #4ade80; font-size: 14px; margin: 4px 0 22px; }
+    .divider { height: 1px; background: #2f2f35; margin: 4px 0 20px; }
+    .claim { font-size: 15px; color: #d4d4d8; margin: 0 0 8px; }
+
+    /* tile */
+    .tile .t-inner { position: absolute; inset: 0; padding: 34px 34px;
+                     display: flex; flex-direction: column; justify-content: center; }
+    .tile .brand { margin-bottom: 14px; font-size: 11px; }
+    .tile .brand img { width: 26px; height: 26px; }
+    .tile h1 { font-size: 30px; margin: 0 0 10px; }
+    .tile .sub { font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    const shot = new URLSearchParams(location.search).get('shot') || 'warning';
+    const root = document.getElementById('root');
+    const BRAND = '<p class="brand"><img src="../../icons/icon128.png" alt="">CloakLLM Guard</p>';
+
+    const copy = (h1, sub, facts = []) => `
+      <div class="copy">
+        ${BRAND}
+        <h1>${h1}</h1>
+        <p class="sub">${sub}</p>
+        ${facts.length ? `<ul class="facts">${facts.map((f) => `<li>${f}</li>`).join('')}</ul>` : ''}
+      </div>`;
+
+    /**
+     * An iframe that grows to its content, optionally scaled. The pages render
+     * asynchronously (module script + a worker round trip), so keep matching
+     * the height for a moment rather than once on load.
+     */
+    function framed({ src, left, top, width, height, scale = 1, fit = false }) {
+      const stage = document.createElement('div');
+      stage.className = 'stage';
+      stage.style.left = `${left}px`;
+      stage.style.top = `${top}px`;
+      const win = document.createElement('div');
+      win.className = 'window';
+      const f = document.createElement('iframe');
+      f.src = src;
+      f.width = width;
+      f.height = height;
+      win.style.width = `${width * scale}px`;
+      win.style.height = `${height * scale}px`;
+      if (scale !== 1) {
+        f.style.transform = `scale(${scale})`;
+        f.style.transformOrigin = '0 0';
+      }
+      win.append(f);
+      stage.append(win);
+      root.append(stage);
+      if (fit) {
+        let n = 0;
+        const t = setInterval(() => {
+          try {
+            const h = f.contentDocument.documentElement.scrollHeight;
+            if (h > 0) {
+              f.height = h;
+              win.style.height = `${h * scale}px`;
+              stage.style.top = `${Math.round((800 - h * scale) / 2)}px`;
+            }
+          } catch { /* not loaded yet */ }
+          if (++n > 40) clearInterval(t);
+        }, 50);
+      }
+    }
+
+    if (shot === 'warning') {
+      root.innerHTML = copy(
+        'Stops personal data before it reaches an AI chat.',
+        'Press send with a card number, an IBAN, an email address or an API key in the box, and Guard asks first. You decide what happens next.',
+        ['Checked on your machine', 'Nothing you write is stored or sent anywhere', '&ldquo;Send anyway&rdquo; is always one click away'],
+      );
+      framed({ src: 'chat.html', left: 500, top: 100, width: 720, height: 600 });
+    }
+
+    if (shot === 'popup') {
+      root.innerHTML = copy(
+        'See what it caught.',
+        'Categories and counts only &mdash; never what you wrote. The record stays on your device.',
+        ['How often a warning was acted on', 'Export a hash-chained log that the open-source cloakllm-verifier can check', 'Clear it any time'],
+      );
+      framed({ src: '../../src/ui/popup.html?state=populated',
+               left: 720, top: 150, width: 320, height: 380, scale: 1.4, fit: true });
+    }
+
+    if (shot === 'settings') {
+      root.innerHTML = copy(
+        'Only the warnings you want.',
+        'Turn off anything that is noisy in your work. A warning you learn to click through is worse than none.',
+        ['Per-category control', 'Works on ChatGPT, Claude, Gemini and Microsoft Copilot', 'Every setting stays on this device'],
+      );
+      // Cropped to end just after the category note: a taller frame leaves a
+      // sliver of the next card peeking in at the bottom edge.
+      framed({ src: '../../src/ui/options.html?state=populated',
+               left: 540, top: 107, width: 660, height: 585 });
+    }
+
+    if (shot === 'privacy') {
+      root.innerHTML = copy(
+        'Nothing leaves your device.',
+        'Detection runs locally inside the extension. There is no server to send anything to.',
+      );
+      // Read the permission list from the manifest the extension actually
+      // ships, so this screenshot cannot claim fewer permissions than it has.
+      const m = await (await fetch('../../manifest.json')).json();
+      const perms = m.permissions || [];
+      const hostPerms = m.host_permissions || [];
+      const sites = [...new Set((m.content_scripts || []).flatMap((c) => c.matches))]
+        .map((p) => p.replace(/^https:\/\//, '').replace(/\/\*$/, ''));
+      const card = document.createElement('div');
+      card.className = 'stage';
+      card.style.left = '580px';
+      card.style.top = '0px';
+      card.innerHTML = `
+        <div class="card">
+          <h2>Permissions requested</h2>
+          ${perms.map((p) => `<div class="perm"><code>${p}</code><span>${
+            p === 'storage' ? 'your settings and the local findings log' : ''}</span></div>`).join('')}
+          <p class="none">${hostPerms.length === 0
+            // Deliberately NOT "no network access": an MV3 extension without
+            // host permissions can still fetch CORS-enabled endpoints, so the
+            // permission list alone would not prove that. What IS verified --
+            // by the 2026-09-20 audit, and checkable in the public source --
+            // is that the extension contains no network code at all.
+            ? 'No host permissions. The extension contains no network code.'
+            : `Host permissions: ${hostPerms.join(', ')}`}</p>
+          <h2>Reads the message box on</h2>
+          <p class="claim" style="color:#a1a1aa">${sites.join(' &middot; ')}</p>
+          <div class="divider"></div>
+          <p class="claim">Your text is checked in memory and then discarded.</p>
+          <p class="claim">No account, no analytics, no telemetry.</p>
+        </div>`;
+      root.append(card);
+      // Centre vertically once laid out.
+      requestAnimationFrame(() => {
+        card.style.top = `${Math.round((800 - card.firstElementChild.offsetHeight) / 2)}px`;
+      });
+    }
+
+    if (shot === 'tile') {
+      document.body.classList.add('tile');
+      root.innerHTML = `<div class="t-inner">${BRAND}
+        <h1>Stops personal data before it reaches AI chats.</h1>
+        <p class="sub">Local checks. Nothing stored or sent.</p></div>`;
+    }
+
+    window.__READY = true;
+  </script>
+</body>
+</html>

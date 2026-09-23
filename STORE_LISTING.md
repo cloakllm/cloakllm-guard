@@ -128,22 +128,74 @@ perform the check and then discarded — nothing is retained or transmitted.
 Must be publicly reachable before submission. `PRIVACY.md` is the content;
 `https://cloakllm.dev/guard/privacy` is the suggested home.
 
-## Assets still needed
+## Assets
 
-- **Screenshots** (1280x800 or 640x400, at least one, up to five). At minimum:
-  the warning dialog mid-send, and the popup showing a populated log.
-- **Small promo tile** (440x280) if we want to be featurable.
-- Icons are generated: `npm run icons` writes 16/32/48/128.
+**Done 2026-09-23.** Upload these from `store/`:
+
+| File | Size | Shows |
+|---|---|---|
+| `screenshots/01-warning.png` | 1280x800 | the warning dialog mid-send |
+| `screenshots/02-popup.png` | 1280x800 | the popup with a populated log |
+| `screenshots/03-settings.png` | 1280x800 | the settings page at its real defaults |
+| `screenshots/04-privacy.png` | 1280x800 | permissions, read from the real manifest |
+| `promo-tile-440x280.png` | 440x280 | small promo tile |
+
+Regenerate with `npm run store` (starts nothing itself -- run
+`node tools/ui-harness.mjs` first). The script reads each PNG's own header
+back and fails unless it is exactly the size the store accepts.
+
+Icons are generated separately: `npm run icons` writes 16/32/48/128.
+
+### What the screenshots show, and why each part is honest
+
+- **The chat interface is generic.** No product name, logo or layout taken
+  from any real AI service. A store screenshot that looks like someone
+  else's product is misleading and a listing-policy problem.
+- **The warning dialog is the real one** (`src/content/warn-ui.js`), and the
+  categories it names are computed live by the vendored detection engine
+  from the text in the composer. Nothing in the dialog is typed by hand.
+- **The popup and settings pages are the real pages**, rendered through the
+  UI harness. Settings show the extension's actual `DEFAULTS` (every
+  category on except IP address), imported from `src/shared/settings.js`.
+- **The popup's numbers are sample data** (37 near-misses, 84% heeded). This
+  is the one illustrative element, and the standard one for a store listing.
+- **All personal data shown is fictitious:** a Visa test number, an
+  `example.com` address and a `555` phone number.
+
+### Screenshot claims
+
+Every sentence in a screenshot is a public claim. Each was checked against
+the code before it was written, and the checkable ones are asserted by
+`test/package.test.js` so a change that falsifies one fails the build.
+
+| Claim | Basis |
+|---|---|
+| Card numbers, IBANs, emails, API keys are flagged on send | all enabled in `DEFAULTS`; the dialog in 01 is the engine's own output |
+| Checked on your machine | detection runs in the extension's service worker |
+| Nothing you write is stored or sent anywhere | the findings log holds categories and counts only -- the verifier cross-check asserts planted values never appear in it |
+| "Send anyway" is always one click away | the fail-open-on-action design; the dialog's own buttons are regression-tested |
+| Export a hash-chained log cloakllm-verifier can check | `test/verifier_crosscheck.py` runs the real emitted chain through the real verifier |
+| Works on ChatGPT, Claude, Gemini and Microsoft Copilot | all four adapters verified on the live sites, 2026-09-20 |
+| **One permission: `storage`. No host permissions.** | **test-bound** -- read from `manifest.json` at render time, and asserted in `test/package.test.js` |
+| **The extension contains no network code** | **test-bound** -- `test/package.test.js` greps everything that ships for network primitives. Deliberately *not* "no network access": an MV3 extension without host permissions can still fetch CORS-enabled endpoints, so the permission list alone would not prove it |
+| No account, no analytics, no telemetry | follows from the line above; there is nowhere to send anything |
+
+If any of these stops being true, the screenshots must be regenerated
+**before** the next listing update, not after.
 
 ## Unresolved before anyone submits
 
 1. ~~Repo name and public URL~~ — **done 2026-09-15:**
    https://github.com/cloakllm/cloakllm-guard (public).
-2. **The Claude, Gemini and Copilot selectors are inferred, not verified.**
-   Shipping to users on sites where the adapter may not bind is worse than not
-   listing those sites: the extension would sit in the toolbar looking like
-   protection while seeing nothing. Verify each while signed in first.
-3. **Neither UI page has been rendered in a real browser.**
+2. ~~The Claude, Gemini and Copilot selectors are inferred, not verified~~ --
+   **done 2026-09-20:** all four adapters verified on the live sites while
+   signed in. One gap carried forward, not blocking: Gemini's send control has
+   no `data-testid`, so for a non-English user click-path protection rests on
+   the CSS class `.send-button` alone. See `src/sites/index.js`.
+3. ~~Neither UI page has been rendered in a real browser~~ -- **done
+   2026-09-23**, and rendering them found a real defect: a broken extension's
+   popup said "Guard is watching your AI chats". Fixed, and both pages are
+   now covered by `test/ui.test.js`.
 4. **Publisher account and developer verification** — a one-off $5 registration
    plus an identity check that can take days.
 5. **Which listing it goes under** — a new publisher has no track record, and a

@@ -25,6 +25,10 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, extname, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The extension's REAL defaults, not a hand-written copy. The first version
+// of this shim carried its own settings map, which happened to agree with
+// settings.js -- by coincidence, and only until someone changed a default.
+import { DEFAULTS } from '../src/shared/settings.js';
 
 // fileURLToPath, not URL.pathname: on Windows the latter yields
 // "/C:/Users/..." with forward slashes, while path.join returns backslashes,
@@ -52,11 +56,7 @@ const SHIM = (state) => `
     : { shown: 37, heeded: 31, sent_anyway: 6, heeded_pct: 84,
         byCategory: { IBAN: 14, EMAIL: 11, CREDIT_CARD: 7, PHONE: 3, API_KEY: 2 },
         first: '2026-09-01T09:12:00.000Z', last: '2026-09-23T16:40:00.000Z' };
-  const settings = {
-    logEnabled: true, warnOnSend: true,
-    categories: { EMAIL: true, CREDIT_CARD: true, IBAN: true, SSN: true,
-                  PHONE: true, API_KEY: true, AWS_KEY: true, JWT: true },
-  };
+  const settings = ${JSON.stringify(DEFAULTS)};
   const answer = (msg) => {
     if (STATE === 'broken') return null;            // worker never answers usefully
     switch (msg && msg.type) {

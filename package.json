@@ -1,18 +1,19 @@
 {
-    "name":  "cloakllm-guard",
-    "version":  "0.1.0",
-    "private":  true,
-    "type":  "module",
-    "description":  "Browser extension: warns before personal data is pasted into an AI chat.",
-    "license":  "MIT",
-    "scripts":  {
-                    "build":  "node build.mjs",
-                    "test":  "node --test test/*.js",
-                    "test:verifier":  "python test/verifier_crosscheck.py",
-                    "icons":  "node tools/make-icons.mjs",
-                    "package":  "npm run build \u0026\u0026 node tools/package.mjs"
-                },
-    "devDependencies":  {
-                            "esbuild":  "^0.28.2"
-                        }
+    "name": "cloakllm-guard",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Browser extension: warns before personal data is pasted into an AI chat.",
+    "license": "MIT",
+    "scripts": {
+        "build": "node build.mjs",
+        "test": "node --test test/*.js",
+        "test:verifier": "python test/verifier_crosscheck.py",
+        "icons": "node tools/make-icons.mjs",
+        "package": "npm run build && node tools/package.mjs",
+        "store": "node tools/store/capture.mjs"
+    },
+    "devDependencies": {
+        "esbuild": "^0.28.2"
+    }
 }

@@ -83,7 +83,7 @@ if (settings) {
       type: 'cloakllm:setSettings', patch: { logEnabled: $('logEnabled').checked },
     });
     // Do not claim "Saved" for a write that was never acknowledged.
-    say(next ? 'Saved' : 'Could not save -- the background service did not respond');
+    say(next ? 'Saved' : 'Could not save \u2014 the background service did not respond');
   });
 } else {
   // The worker never answered. Previously this branch did not exist: the
@@ -93,7 +93,7 @@ if (settings) {
   // misreports a setting is worse than one that admits it cannot load.
   $('cats').replaceChildren(Object.assign(document.createElement('li'), {
     className: 'cat-note',
-    textContent: 'Could not load your settings -- the background service did not respond. '
+    textContent: 'Could not load your settings \u2014 the background service did not respond. '
       + 'Nothing here has been changed. Try disabling and re-enabling the extension.',
   }));
   const box = $('logEnabled');

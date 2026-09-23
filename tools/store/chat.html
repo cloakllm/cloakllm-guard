@@ -1,0 +1,95 @@
+<!doctype html>
+<!--
+  A deliberately GENERIC chat interface for store screenshots.
+
+  No product name, logo or layout borrowed from any real AI service: a store
+  screenshot that looks like someone else's product is both misleading and a
+  listing-policy problem. What IS real is everything that matters: the
+  warning dialog is the extension's own warn-ui.js, and the categories it
+  names are computed live by the vendored detection engine from the text in
+  the composer -- nothing about the dialog is typed by hand.
+
+  All data is fictitious: a test card number, an example.com address and a
+  555 phone number.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>chat mock</title>
+  <style>
+    :root { --ground:#18181b; --side:#131316; --raised:#202024; --line:#2f2f35;
+            --ink:#fafafa; --soft:#a1a1aa; --dim:#71717a; --accent:#8b5cf6; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { display: flex; background: var(--ground); color: var(--ink);
+           font: 14px/1.55 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+           -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+    aside { width: 190px; background: var(--side); border-right: 1px solid var(--line);
+            padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .new { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+           font-size: 13px; margin-bottom: 14px; color: var(--ink); }
+    .hist-label { font-size: 11px; color: var(--dim); margin: 6px 4px; }
+    .hist { font-size: 13px; color: var(--soft); padding: 6px 8px; border-radius: 6px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist.on { background: var(--raised); color: var(--ink); }
+
+    main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    header { height: 48px; border-bottom: 1px solid var(--line); display: flex;
+             align-items: center; padding: 0 20px; font-size: 13px; color: var(--soft); }
+    .thread { flex: 1; padding: 24px 32px; display: flex; flex-direction: column; gap: 16px;
+              overflow: hidden; }
+    .msg { max-width: 78%; padding: 10px 14px; border-radius: 12px; }
+    .msg.user { align-self: flex-end; background: var(--raised); }
+    .msg.bot  { align-self: flex-start; color: #e4e4e7; }
+
+    .composer { margin: 0 24px 22px; border: 1px solid var(--line); border-radius: 14px;
+                background: var(--raised); padding: 12px 12px 12px 16px;
+                display: flex; align-items: flex-end; gap: 12px; }
+    .composer .text { flex: 1; color: var(--ink); }
+    .send { width: 34px; height: 34px; border-radius: 50%; background: var(--accent);
+            display: grid; place-items: center; flex: none; }
+    .send svg { width: 16px; height: 16px; }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="new">+ New chat</div>
+    <div class="hist-label">Recent</div>
+    <div class="hist on">Refund confirmation</div>
+    <div class="hist">Quarterly summary draft</div>
+    <div class="hist">SQL join question</div>
+    <div class="hist">Trip itinerary</div>
+  </aside>
+  <main>
+    <header>Assistant</header>
+    <div class="thread">
+      <div class="msg user">I need to send a customer a refund confirmation today.</div>
+      <div class="msg bot">Happy to help. Share the order details and I&rsquo;ll draft
+        a short, friendly confirmation you can send as-is.</div>
+    </div>
+    <div class="composer">
+      <div class="text" id="composer"></div>
+      <div class="send" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { createDetector, detect, summarise } from '../../src/vendor/cloakllm-detect.js';
+    import { showWarning } from '../../src/content/warn-ui.js';
+
+    const TEXT = 'Can you draft the refund confirmation? Card on file is '
+      + '4111 1111 1111 1111, send it to customer@example.com and ring them on '
+      + '+1 415 555 0199 once it is done.';
+    document.getElementById('composer').textContent = TEXT;
+
+    // The categories in the dialog come from the real engine, not from here.
+    const summary = summarise(detect(createDetector(), TEXT));
+    window.__SUMMARY = summary;
+    showWarning(summary);   // resolves on a click that a screenshot never makes
+  </script>
+</body>
+</html>

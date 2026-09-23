@@ -7,7 +7,7 @@
 // extension pulled after it has shipped.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ADAPTERS } from '../src/sites/index.js';
@@ -114,7 +114,13 @@ test('the store listing discloses the coverage boundary', () => {
 
 test('the short description fits the store limit', () => {
   const listing = read('STORE_LISTING.md');
-  const m = listing.match(/## Short description[^\n]*\n+```\n([\s\S]*?)\n```/);
+  // CRLF-tolerant. This pattern used to assume \n, and with
+  // core.autocrlf=true every Windows checkout is CRLF -- so the test failed
+  // on any fresh Windows clone. CI runs on Linux and never saw it; it passed
+  // locally only because one working copy happened to be LF. A test that
+  // depends on the line endings of the machine it runs on is testing the
+  // machine.
+  const m = listing.match(/## Short description[^\r\n]*(?:\r?\n)+```\r?\n([\s\S]*?)\r?\n```/);
   assert.ok(m, 'short description block not found');
   assert.ok(m[1].length <= 132, `short description is ${m[1].length} chars, limit is 132`);
 });
@@ -124,4 +130,43 @@ test('the extension declares no host permissions beyond its content scripts', ()
   // appears it should be a deliberate decision, not a drift.
   assert.equal(manifest.host_permissions, undefined,
     'host_permissions appeared -- justify it in STORE_LISTING.md first');
+});
+
+// --------------------------------------------------- screenshot claims --
+// The store screenshots make public claims. store/screenshots/04-privacy.png
+// says "one permission: storage" and "the extension contains no network
+// code". A PNG is a frozen artifact: if either stops being true the image
+// keeps saying it. These tests make the build fail first, so the screenshot
+// is regenerated before the listing is updated, not after someone notices.
+
+test('SCREENSHOT CLAIM: the only permission requested is storage', () => {
+  assert.deepEqual(manifest.permissions, ['storage'],
+    'permissions changed -- regenerate the store screenshots (npm run store) '
+    + 'and update the claims table in STORE_LISTING.md');
+});
+
+test('SCREENSHOT CLAIM: nothing that ships contains network code', () => {
+  // Deliberately a claim about CODE, not about permissions: an MV3
+  // extension without host permissions can still fetch CORS-enabled
+  // endpoints, so the permission list alone would not prove this.
+  const NET = /\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource|new\s+Image\s*\(|importScripts\s*\(/;
+
+  const walk = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true })
+    .flatMap((d) => (d.isDirectory()
+      ? walk(join(dir, d.name))
+      : /\.(m?js|html)$/.test(d.name) ? [join(dir, d.name)] : []));
+
+  // Built outputs are the most important files to scan -- they are what
+  // actually runs -- so their absence must fail, not quietly shrink the scan.
+  for (const built of ['dist/content.js', 'src/vendor/cloakllm-detect.js']) {
+    assert.ok(exists(built), `${built} missing: run \`npm run build\` first, `
+      + 'or this scan would pass without looking at the code that ships');
+  }
+
+  const files = [...walk('src'), ...walk('dist')];
+  assert.ok(files.length > 10, `scanned only ${files.length} files`);
+  const hits = files.filter((f) => NET.test(readFileSync(join(ROOT, f), 'utf8')));
+  assert.deepEqual(hits, [],
+    `network code found in shipped files: ${hits.join(', ')} -- the store `
+    + 'screenshots and PRIVACY.md both say there is none');
 });

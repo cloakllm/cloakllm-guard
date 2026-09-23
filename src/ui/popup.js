@@ -62,7 +62,7 @@ function render(s) {
   $('shownLabel').textContent = s.shown === 1 ? 'near-miss caught' : 'near-misses caught';
   $('heeded').textContent = `${s.heeded_pct}%`;
   $('heededText').textContent =
-    `heeded -- ${s.heeded} of ${s.shown} ${s.shown === 1 ? 'warning was' : 'warnings were'} acted on`;
+    `heeded \u2014 ${s.heeded} of ${s.shown} ${s.shown === 1 ? 'warning was' : 'warnings were'} acted on`;
 
   const cats = Object.entries(s.byCategory).sort((a, b) => b[1] - a[1]);
   $('cats').replaceChildren(...cats.map(([cat, n]) => {
