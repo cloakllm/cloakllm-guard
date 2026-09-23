@@ -45,12 +45,21 @@ function findChrome() {
   return hit;
 }
 
-/** Width and height from a PNG's IHDR chunk. */
-function pngSize(path) {
+/**
+ * Width, height and colour type from a PNG's IHDR chunk.
+ *
+ * The store accepts screenshots and promo tiles only as JPEG or "24-bit PNG
+ * (no alpha)" -- colour type 2. This script originally checked size alone;
+ * the images happened to come out without alpha only because of how this
+ * Chrome version writes screenshots, so a later version emitting RGBA
+ * (colour type 6) would have been rejected at upload rather than here.
+ * Check the whole requirement, not the half that was easy to see.
+ */
+function pngInfo(path) {
   const b = readFileSync(path);
   const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
   if (!sig.every((v, i) => b[i] === v)) throw new Error(`${path} is not a PNG`);
-  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20), depth: b[24], colour: b[25] };
 }
 
 async function harnessUp() {
@@ -98,10 +107,15 @@ for (const s of SHOTS) {
   } finally {
     rmSync(profile, { recursive: true, force: true });
   }
-  const got = pngSize(out);
-  const ok = got.w === s.w && got.h === s.h;
-  if (!ok) failed++;
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${s.file}  ${got.w}x${got.h}${ok ? '' : `  (store needs ${s.w}x${s.h})`}`);
+  const got = pngInfo(out);
+  const problems = [];
+  if (got.w !== s.w || got.h !== s.h) problems.push(`store needs ${s.w}x${s.h}`);
+  if (got.colour !== 2 || got.depth !== 8) {
+    problems.push(`store needs 24-bit RGB with no alpha; got colour type ${got.colour}, depth ${got.depth}`);
+  }
+  if (problems.length) failed++;
+  console.log(`${problems.length ? 'FAIL' : 'ok  '} ${s.file}  ${got.w}x${got.h} rgb24`
+    + (problems.length ? `  (${problems.join('; ')})` : ''));
 }
 
 process.exit(failed ? 1 : 0);
