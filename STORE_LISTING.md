@@ -83,10 +83,14 @@ The dashboard asks for these individually.
 
 **`storage`**
 ```
-Stores the user's category preferences and a local record of warnings shown
-(categories and counts only, never message content). Nothing in this storage
-leaves the device.
+Stores the user's settings and a local record of each warning shown: the time,
+the site, which categories of data were found and how many, and whether the
+user edited the message or sent it anyway. It never stores message content or
+the values that were found. Nothing in this storage leaves the device.
 ```
+*(The earlier text said "categories and counts only", which understated it:
+the record also holds the time, the site and the user's choice. The privacy
+policy already said so; this now matches it.)*
 
 **Host access to the listed AI chat sites**
 ```
@@ -107,27 +111,41 @@ No. All code is contained in the package. The detection engine is bundled at
 build time; the build fails if any remote-code construct appears in it.
 ```
 
-**Data usage disclosures**
+**Remote code: No.** Verified against the uploaded zip (2026-09-23): no
+remote script tags, no remote imports, no `eval`, `new Function`,
+`importScripts` or WebAssembly. The only URLs in shipped files are the six
+content-script match patterns.
 
-| Question | Answer |
-|---|---|
-| Collects personally identifiable information | **No** |
-| Collects health information | No |
-| Collects financial and payment information | **No** — detected categories are counted, values are never stored or transmitted |
-| Collects authentication information | **No** — same |
-| Collects personal communications | **No** — message text is read in memory to check it, then discarded |
-| Collects location | No |
-| Collects web history | No |
-| Collects user activity | **No** — warning counts are stored locally and never transmitted |
-| Collects website content | **No** — read transiently to perform the check, never retained |
-| Sells data to third parties | No |
-| Uses data for unrelated purposes | No |
-| Uses data to determine creditworthiness | No |
+**Data usage disclosures -- CORRECTED 2026-09-23**
 
-The reviewer will focus on "collects personal communications" and "website
-content". The honest answer to both is that the text is read in memory to
-perform the check and then discarded — nothing is retained or transmitted.
-`PRIVACY.md` says so plainly and the test suite asserts it.
+The first version of this table answered **No** to everything, on the grounds
+that nothing leaves the device. **That is not Google's test.** Its User Data
+FAQ says: *"Extensions are required to disclose how they handle user data,
+even when data is processed or stored locally on a user's device and is not
+transmitted to external servers or third parties."* So the question is what
+the extension HANDLES, not what it transmits -- and certifying the all-No
+table would have been a false declaration.
+
+| Category | Answer | Why |
+|---|---|---|
+| Personally identifiable information | **Yes** | detects email addresses, US Social Security numbers and phone numbers in what the user types |
+| Health information | No | no health data is detected |
+| Financial and payment information | **Yes** | detects credit card numbers and IBANs |
+| Authentication information | **Yes** | detects API keys, AWS access keys and access tokens |
+| Personal communications | **Yes** | reads the chat message the user is about to send |
+| Location | No | IP-address detection exists (off by default), but an address typed into a message is not the user's location |
+| Web history | **Yes** | the local log records which site each warning happened on, and when |
+| User activity | **Yes** | responds to key presses, pastes and clicks on send, and logs whether the user heeded or sent anyway |
+| Website content | **Yes** | reads the text in the site's message box |
+
+All three certifications are true and should be ticked: no selling or
+transfer to third parties; no use unrelated to the single purpose; no use for
+creditworthiness or lending.
+
+This will show several categories on the public listing. That is the honest
+state of the extension, and the privacy policy explains that all of it is
+handled on the device and never transmitted. Under-declaring on a privacy
+product would be both a policy violation and the worst possible look.
 
 ## Privacy policy URL
 
