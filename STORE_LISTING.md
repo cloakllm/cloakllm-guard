@@ -5,6 +5,14 @@ Copy for the developer dashboard. **Nothing here has been submitted.** Review
 
 ---
 
+> **SUBMITTED FOR REVIEW 2026-09-23** (publisher: CloakLLM, non-trader, v0.1.0).
+> In-depth review expected because of the host access. When it passes:
+> install from the store, check the full loop on a real site (warning appears,
+> "Send anyway" actually sends), then go public; then set `STORE_URL` in
+> `cloakllm-web/src/app/guard/page.tsx` and add `/guard` to the site nav.
+> If it was staged to publish later, it must be published within 30 days of
+> passing review or the staged version expires.
+
 ## Name
 
 ```
