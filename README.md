@@ -6,18 +6,13 @@ It sits on the AI chat sites you already use. When you paste or press send, it
 checks the text **on your machine** and — from M2 onward — warns you before it
 goes out. You can always send anyway. It is a seatbelt, not a lock.
 
-**Status: v0.1, feature-complete and not yet published.** It works — install it
-unpacked and it will stop a send that carries personal data and ask. It is not
-on the Chrome Web Store yet, and two things are deliberately unfinished:
-
-- The composer selectors for **Claude, Gemini and Copilot are inferred, not
-  verified.** Every one of those sites gates its composer behind a login, so
-  they could not be read off a live page. ChatGPT is verified. If an adapter
-  has drifted the extension says so in the page console rather than failing
-  quietly — see *Adapter health* below.
-- The popup and options pages have not been exercised in a real browser.
-
-Bug reports on either are the most useful thing you could send.
+**Status: v0.1, [on the Chrome Web Store](https://chromewebstore.google.com/detail/cloakllm-guard/pecgdpfhaaegckfacpplghfeojbdnkoa)
+since 2026-09-25.** All four site adapters (ChatGPT, Claude, Gemini, Copilot)
+have been checked on the live sites. Chat sites change their layout without
+notice, so an adapter can drift at any time; when one does, the extension says
+so in the page console rather than failing quietly — see *Adapter health*
+below. Those reports are the most useful thing you could send:
+[cloakllm.dev/guard/support](https://cloakllm.dev/guard/support#report).
 
 ## When it speaks up
 

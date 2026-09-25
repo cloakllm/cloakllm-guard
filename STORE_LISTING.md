@@ -1,10 +1,17 @@
 # Chrome Web Store listing — CloakLLM Guard
 
-Copy for the developer dashboard. **Nothing here has been submitted.** Review
-`PRIVACY.md` and the unresolved items at the bottom before anyone uploads.
+Copy for the developer dashboard.
 
 ---
 
+> **PUBLISHED 2026-09-25, v0.1.0, public.** Item ID
+> `pecgdpfhaaegckfacpplghfeojbdnkoa`. The package the store serves was
+> downloaded and compared file by file with `build/cloakllm-guard-0.1.0.zip`:
+> every file is byte-identical except `manifest.json`, which differs only by the
+> `update_url` line the store adds, plus the store's own
+> `_metadata/verified_contents.json`. **Next: upload `build/cloakllm-guard-0.1.1.zip`
+> as the first update.** The history below is kept for reference.
+>
 > **SUBMITTED FOR REVIEW 2026-09-23** (publisher: CloakLLM, non-trader, v0.1.0).
 > In-depth review expected because of the host access. When it passes:
 > install from the store, check the full loop on a real site (warning appears,
