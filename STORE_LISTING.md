@@ -12,6 +12,17 @@ Copy for the developer dashboard.
 > `_metadata/verified_contents.json`. **Next: upload `build/cloakllm-guard-0.1.1.zip`
 > as the first update.** The history below is kept for reference.
 >
+> **The 0.1.1 zip was REBUILT 2026-10-09** against CloakLLM-JS 0.12.7 (`3c2eca5`)
+> so it carries the decimal fix from cloakllm/CloakLLM#10: before it, typing a
+> number like `237.07924402` into a chat raised a false "phone number" warning.
+> Checked by running the detector from inside each zip with `process` deleted:
+> the earlier 0.1.1 zip flagged `237.07924402` / `20042839.001880005` as PHONE
+> and SSN, the rebuilt one flags nothing, and both still catch a card, an
+> email and a dotted phone. Only `src/vendor/cloakllm-detect.js` changed in
+> substance (plus one blank line in `src/sites/index.js`, which now matches the
+> committed file). Same version number, since 0.1.1 was never uploaded. Still no
+> network code and no new permissions, so the store privacy answers are unchanged.
+>
 > **SUBMITTED FOR REVIEW 2026-09-23** (publisher: CloakLLM, non-trader, v0.1.0).
 > In-depth review expected because of the host access. When it passes:
 > install from the store, check the full loop on a real site (warning appears,
